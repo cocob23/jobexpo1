@@ -146,6 +146,7 @@ export default function SubirNotisScreen() {
 
 const styles = StyleSheet.create({
   container: {
+    marginTop: 50,
     padding: 20,
     backgroundColor: '#fff',
     flexGrow: 1,

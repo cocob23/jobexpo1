@@ -8,6 +8,7 @@ import {
   TextInput,
   RefreshControl,
   Linking,
+  Alert,
 } from 'react-native'
 import { supabase } from '@/constants/supabase'
 import { router } from 'expo-router'
@@ -51,6 +52,19 @@ export default function EjecutivaInicio() {
     }
   }
 
+  const actualizarEstado = async (id: number, nuevoEstado: string) => {
+    const { error } = await supabase
+      .from('notis')
+      .update({ estado: nuevoEstado })
+      .eq('id', id)
+
+    if (error) {
+      Alert.alert('Error', 'No se pudo actualizar el estado')
+    } else {
+      obtenerNotis()
+    }
+  }
+
   const notisFiltradas = notis.filter(n => {
     const coincideId = n.id.toString().includes(busqueda.trim())
     const coincideEstado = estadoFiltro === 'todos' || n.estado === estadoFiltro
@@ -61,9 +75,26 @@ export default function EjecutivaInicio() {
     <View style={styles.notiCard}>
       <Text style={styles.notiTitulo}>#{item.id} - {item.titulo}</Text>
       <Text style={styles.notiEstado}>Estado: {item.estado}</Text>
+
       <TouchableOpacity style={styles.botonVer} onPress={() => abrirPDF(item.archivo_url)}>
         <Text style={styles.botonVerTexto}>Ver PDF</Text>
       </TouchableOpacity>
+
+      <View style={styles.botonesEstado}>
+        <TouchableOpacity
+          style={[styles.botonEstado, { backgroundColor: '#22c55e' }]} // verde
+          onPress={() => actualizarEstado(item.id, 'aprobado')}
+        >
+          <Text style={styles.botonEstadoTexto}>Aprobar</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.botonEstado, { backgroundColor: '#ef4444' }]} // rojo
+          onPress={() => actualizarEstado(item.id, 'desaprobado')}
+        >
+          <Text style={styles.botonEstadoTexto}>Desaprobar</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   )
 
@@ -184,6 +215,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 6,
     alignItems: 'center',
+    marginBottom: 8,
   },
   botonVerTexto: {
     color: '#fff',
@@ -197,6 +229,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   botonTexto: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  botonesEstado: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  botonEstado: {
+    flex: 1,
+    padding: 10,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  botonEstadoTexto: {
     color: '#fff',
     fontWeight: 'bold',
   },
