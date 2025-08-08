@@ -1,16 +1,31 @@
 // src/App.tsx
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
+
+// Login
 import Login from './auth/Login'
-import SuperadminHome from './superadmin/SuperAdminHome'
+
+// FM
 import FMLayout from './fm/FMlayout'
 import FMHome from './fm/FMHome'
-import VerTareas from './fm/ver-tareas'
-import AsignarTarea from './fm/asignar-tarea'
-import CrearTecnico from './fm/crear-tecnico'
-import ListaTecnicos from './fm/tecnicos'
+import VerTareasFM from './fm/ver-tareas'
+import AsignarTareaFM from './fm/asignar-tarea'
+import CrearTecnicoFM from './fm/crear-tecnico'
+import ListaTecnicosFM from './fm/tecnicos'
 import PerfilFM from './fm/perfil'
-import PerfilTecnico from './fm/perfil-tecnico'
+import PerfilTecnicoFM from './fm/perfil-tecnico'
 
+// Superadmin
+import SuperadminLayout from './superadmin/SuperadminLayout'
+import SuperadminHome from './superadmin/superAdminHome'
+import CrearTecnicoSA from './superadmin/crear-tecnico'
+import TecnicosSA from './superadmin/tecnicos'
+import TicketsSA from './superadmin/tickets'
+import PerfilSuperadmin from './superadmin/perfil'
+import PerfilTecnicoSA from './superadmin/perfil-tecnico'
+import AsignarTareaSA from './superadmin/asignar-tarea'
+import VerTareasSA from './superadmin/ver-tareas'
+
+// Utils
 import ProtectedRoute from './components/ProtectedRoute'
 
 export default function App() {
@@ -20,16 +35,27 @@ export default function App() {
         <Route path="/" element={<Navigate to="/login" />} />
         <Route path="/login" element={<Login />} />
 
+        {/* RUTAS SUPERADMIN */}
         <Route
           path="/superadmin"
           element={
             <ProtectedRoute>
-              <SuperadminHome />
+              <SuperadminLayout />
             </ProtectedRoute>
           }
-        />
+        >
+          <Route index element={<SuperadminHome />} />
+          <Route path="crear-tecnico" element={<CrearTecnicoSA />} />
+          <Route path="tecnicos" element={<TecnicosSA />} />
+          <Route path="asignar-tarea" element={<AsignarTareaSA />} />
+          <Route path="ver-tareas" element={<VerTareasSA />} />
+          <Route path="tickets" element={<TicketsSA />} />
+          <Route path="perfil" element={<PerfilSuperadmin />} />
+          <Route path="perfil-tecnico/:id" element={<PerfilTecnicoSA />} />
 
-        {/* protegemos todo el layout FM */}
+        </Route>
+
+        {/* RUTAS FM */}
         <Route
           path="/fm"
           element={
@@ -39,16 +65,12 @@ export default function App() {
           }
         >
           <Route index element={<FMHome />} />
-          <Route path="ver-tareas" element={<VerTareas />} />
-          <Route path="asignar-tarea" element={<AsignarTarea />} />
-          <Route path="crear-tecnico" element={<CrearTecnico />} />
-          <Route path="tecnicos" element={<ListaTecnicos />} />
+          <Route path="ver-tareas" element={<VerTareasFM />} />
+          <Route path="asignar-tarea" element={<AsignarTareaFM />} />
+          <Route path="crear-tecnico" element={<CrearTecnicoFM />} />
+          <Route path="tecnicos" element={<ListaTecnicosFM />} />
           <Route path="perfil" element={<PerfilFM />} />
-          <Route path="perfil-tecnico" element={<PerfilTecnico />} />
-
-
-
-
+          <Route path="perfil-tecnico/:id" element={<PerfilTecnicoFM />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" />} />

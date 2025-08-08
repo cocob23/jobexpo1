@@ -1,61 +1,119 @@
-import { useState } from 'react'
+import { supabase } from '@/constants/supabase'
+import { Buffer } from 'buffer'
+import dayjs from 'dayjs'
+import 'dayjs/locale/es'
+import * as DocumentPicker from 'expo-document-picker'
+import * as FileSystem from 'expo-file-system'
+import { useLocalSearchParams } from 'expo-router'
+import { shareAsync } from 'expo-sharing'
+import { useEffect, useState } from 'react'
 import {
   Alert,
+  Image,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   TouchableOpacity,
-  View,
-  Keyboard,
-  TouchableWithoutFeedback,
+  View
 } from 'react-native'
-import * as DocumentPicker from 'expo-document-picker'
-import * as FileSystem from 'expo-file-system'
-import { supabase } from '@/constants/supabase'
-import uuid from 'react-native-uuid'
-import { Buffer } from 'buffer'
 
+dayjs.locale('es')
 global.Buffer = Buffer
 
-export default function SubirNotisScreen() {
-  const [titulo, setTitulo] = useState('')
-  const [descripcion, setDescripcion] = useState('')
-  const [archivo, setArchivo] = useState<any>(null)
-  const [subiendo, setSubiendo] = useState(false)
+export default function PerfilTecnico() {
+  const { id } = useLocalSearchParams()
+  const [tecnico, setTecnico] = useState(null)
+  const [tareas, setTareas] = useState([])
+  const [documentos, setDocumentos] = useState(null)
+  const [refreshing, setRefreshing] = useState(false)
 
-  const seleccionarPDF = async () => {
+  useEffect(() => {
+    if (id) fetchDatos()
+  }, [id])
+
+  const fetchDatos = async () => {
+    const { data: usuario, error: errorUsuario } = await supabase
+      .from('usuarios')
+      .select('id, nombre, apellido')
+      .eq('id', id)
+      .single()
+
+    if (errorUsuario) {
+      console.error('Error obteniendo datos del técnico:', errorUsuario)
+      return
+    }
+
+    let avatar_url = null
+    const { data: files, error: listError } = await supabase.storage
+      .from('avatars')
+      .list(`${usuario.id}`, {
+        limit: 100,
+        sortBy: { column: 'created_at', order: 'desc' },
+      })
+
+    if (!listError && files && files.length > 0) {
+      const latestFile = files[0].name
+      const avatarPath = `${usuario.id}/${latestFile}`
+      const { data: avatarData, error: avatarUrlError } = await supabase.storage
+        .from('avatars')
+        .getPublicUrl(avatarPath)
+
+      if (!avatarUrlError) {
+        avatar_url = avatarData.publicUrl
+      }
+    }
+
+    setTecnico({ ...usuario, avatar_url })
+
+    const { data: tareasProximas, error: errorTareas } = await supabase
+      .from('trabajos_mantenimiento')
+      .select('*')
+      .eq('usuario_id', id)
+      .gte('fecha_realizacion', new Date().toISOString())
+      .order('fecha_realizacion', { ascending: true })
+
+    if (!errorTareas) {
+      setTareas(tareasProximas || [])
+    }
+
+    const { data: doc, error: errorDoc } = await supabase
+      .from('documentos_tecnicos')
+      .select('*')
+      .eq('tecnico_id', id)
+      .maybeSingle()
+
+    if (!errorDoc) {
+      setDocumentos(doc)
+    }
+  }
+
+  const onRefresh = async () => {
+    setRefreshing(true)
+    await fetchDatos()
+    setRefreshing(false)
+  }
+
+  const subirDocumento = async (tipo) => {
     const result = await DocumentPicker.getDocumentAsync({
       type: 'application/pdf',
       copyToCacheDirectory: true,
     })
+    if (result.canceled) return
 
-    if (!result.canceled) {
-      setArchivo(result.assets[0])
-    }
-  }
-
-  const subirNoti = async () => {
-    if (!titulo || !descripcion || !archivo) {
-      Alert.alert('Faltan datos', 'Completá todos los campos y seleccioná un PDF')
-      return
-    }
-
-    setSubiendo(true)
+    const file = result.assets[0]
+    const fileUri = file.uri
+    const bucket = tipo === 'poliza' ? 'polizas' : 'actacompromiso'
+    const path = `${id}/${tipo}.pdf`
 
     try {
-      const fileUri = archivo.uri
       const base64 = await FileSystem.readAsStringAsync(fileUri, {
         encoding: FileSystem.EncodingType.Base64,
       })
 
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData.session?.access_token
-      if (!token) throw new Error('No se pudo obtener el token')
-
-      const nombreArchivo = `${uuid.v4()}.pdf`
-      const bucket = 'notis'
-      const path = nombreArchivo
+      if (!token) throw new Error('no se pudo obtener el token')
 
       const uploadRes = await fetch(
         `https://lknfaxkigownvjsijzhb.supabase.co/storage/v1/object/${bucket}/${path}`,
@@ -72,125 +130,219 @@ export default function SubirNotisScreen() {
 
       if (!uploadRes.ok) {
         const errorText = await uploadRes.text()
-        console.error('❌ Error al subir PDF:', errorText)
-        Alert.alert('Error', 'No se pudo subir el PDF')
+        console.error('❌ Error detallado:', errorText)
+
+        if (errorText.includes('new row violates row-level security policy')) {
+          Alert.alert('Archivo existente', `Debe eliminar la ${tipo === 'poliza' ? 'póliza' : 'acta'} actual antes de subir una nueva.`)
+        } else {
+          Alert.alert('Error', 'Falló la subida del archivo.')
+        }
         return
       }
 
-      const publicUrl = `https://lknfaxkigownvjsijzhb.supabase.co/storage/v1/object/public/${bucket}/${path}`
+      const url = `https://lknfaxkigownvjsijzhb.supabase.co/storage/v1/object/public/${bucket}/${path}`
+      const campo = tipo === 'poliza' ? 'poliza_url' : 'acta_compromiso_url'
 
-      const { error: insertError } = await supabase.from('notis').insert({
-        titulo,
-        descripcion,
-        archivo_url: publicUrl,
-        estado: 'pendiente',
-      })
+      const { error } = await supabase
+        .from('documentos_tecnicos')
+        .upsert([{ tecnico_id: id, [campo]: url }])
 
-      if (insertError) {
-        console.error('❌ Error insertando noti:', insertError)
-        Alert.alert('Error', 'No se pudo guardar la noti')
+      if (error) {
+        console.error('❌ error en upsert:', error)
+        Alert.alert('error', 'no se pudo guardar la URL.')
         return
       }
 
-      Alert.alert('Éxito', 'Noti subida correctamente')
-      setTitulo('')
-      setDescripcion('')
-      setArchivo(null)
-    } catch (error) {
-      console.error('❌ Error inesperado:', error)
-      Alert.alert('Error', error.message || 'Ocurrió un error inesperado')
-    } finally {
-      setSubiendo(false)
+      const { data: docActualizado } = await supabase
+        .from('documentos_tecnicos')
+        .select('*')
+        .eq('tecnico_id', id)
+
+      setDocumentos(docActualizado)
+      Alert.alert('éxito', `La ${tipo} fue subida correctamente.`)
+    } catch (err) {
+      console.error('❌ error inesperado:', err)
+      Alert.alert('error', err.message || 'ocurrió un error inesperado.')
     }
   }
 
+  const descargarArchivo = async (tipo) => {
+    const bucket = tipo === 'poliza' ? 'polizas' : 'actacompromiso'
+    const path = `${id}/${tipo}.pdf`
+    const url = `https://lknfaxkigownvjsijzhb.supabase.co/storage/v1/object/public/${bucket}/${path}`
+
+    try {
+      const headRes = await fetch(url, { method: 'HEAD' })
+      if (!headRes.ok) {
+        Alert.alert('Aviso', `NO HAY ${tipo.toUpperCase()}`)
+        return
+      }
+
+      const localPath = FileSystem.documentDirectory + `${tipo}.pdf`
+      const downloadResumable = FileSystem.createDownloadResumable(url, localPath)
+      const { uri } = await downloadResumable.downloadAsync()
+
+      if (uri) {
+        await shareAsync(uri)
+      } else {
+        Alert.alert('Error', `No se pudo descargar la ${tipo}.`)
+      }
+    } catch (e) {
+      console.error(`❌ error al descargar ${tipo}:`, e)
+      Alert.alert('Error', `Ocurrió un error al descargar la ${tipo}.`)
+    }
+  }
+
+  const eliminarDocumento = async (tipo) => {
+    Alert.alert(
+      `Eliminar ${tipo}`,
+      `¿Está seguro que desea eliminar la ${tipo === 'poliza' ? 'póliza' : 'acta'} actual?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            const bucket = tipo === 'poliza' ? 'polizas' : 'actacompromiso'
+            const path = `${id}/${tipo}.pdf`
+
+            const { error } = await supabase.storage.from(bucket).remove([path])
+
+            if (error) {
+              Alert.alert('Error', `No se pudo eliminar la ${tipo}.`)
+              return
+            }
+
+            const campo = tipo === 'poliza' ? 'poliza_url' : 'acta_compromiso_url'
+            const { error: updateError } = await supabase
+              .from('documentos_tecnicos')
+              .update({ [campo]: null })
+              .eq('tecnico_id', id)
+
+            if (updateError) {
+              Alert.alert('Error', 'No se pudo actualizar la base.')
+              return
+            }
+
+            setDocumentos((prev) => ({ ...prev, [campo]: null }))
+            Alert.alert('Éxito', `La ${tipo} fue eliminada correctamente.`)
+          },
+        },
+      ]
+    )
+  }
+
   return (
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.titulo}>Subir Noti (PDF)</Text>
+    <ScrollView
+      contentContainerStyle={styles.container}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
+      {tecnico && (
+        <>
+          <Image
+            source={{
+              uri: tecnico.avatar_url || 'https://ui-avatars.com/api/?name=User&background=ccc&color=000&size=128',
+            }}
+            style={styles.avatar}
+          />
+          <Text style={styles.nombre}>{tecnico.nombre} {tecnico.apellido}</Text>
+          <Text style={styles.empresa}>Empresa asignada: {tecnico.empresa || 'Sin asignar'}</Text>
 
-        <TextInput
-          placeholder="Título"
-          style={styles.input}
-          value={titulo}
-          onChangeText={setTitulo}
-        />
+          <Text style={styles.subtitulo}>Próximas tareas:</Text>
+          {tareas.length === 0 ? (
+            <Text style={{ color: '#666' }}>Sin tareas próximas</Text>
+          ) : (
+            tareas.map((t, i) => (
+              <View key={i} style={styles.cardTarea}>
+                <Text style={styles.tareaTitulo}>{t.descripcion}</Text>
+                <Text style={styles.tareaFecha}>{dayjs(t.fecha_realizacion).format('DD/MM HH:mm')}hs</Text>
+              </View>
+            ))
+          )}
 
-        <TextInput
-          placeholder="Descripción"
-          multiline
-          style={[styles.input, { height: 100 }]}
-          value={descripcion}
-          onChangeText={setDescripcion}
-        />
+          <TouchableOpacity style={styles.boton} onPress={() => subirDocumento('poliza')}>
+            <Text style={styles.botonTexto}>Subir póliza de seguro</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity style={styles.botonArchivo} onPress={seleccionarPDF}>
-          <Text style={styles.botonTexto}>
-            {archivo ? 'Cambiar PDF' : 'Seleccionar PDF'}
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity style={styles.boton} onPress={() => subirDocumento('acta')}>
+            <Text style={styles.botonTexto}>Subir acta de compromiso</Text>
+          </TouchableOpacity>
 
-        {archivo && (
-          <Text style={styles.nombreArchivo}>📄 {archivo.name}</Text>
-        )}
+          <TouchableOpacity style={[styles.boton, { backgroundColor: '#22c55e' }]} onPress={() => descargarArchivo('poliza')}>
+            <Text style={styles.botonTexto}>Descargar póliza de seguro</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.boton, subiendo && { opacity: 0.6 }]}
-          onPress={subirNoti}
-          disabled={subiendo}
-        >
-          <Text style={styles.botonTexto}>
-            {subiendo ? 'Subiendo...' : 'Subir Noti'}
-          </Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </TouchableWithoutFeedback>
+          <TouchableOpacity style={[styles.boton, { backgroundColor: '#22c55e' }]} onPress={() => descargarArchivo('acta')}>
+            <Text style={styles.botonTexto}>Descargar acta de compromiso</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[styles.boton, { backgroundColor: '#ef4444' }]} onPress={() => eliminarDocumento('poliza')}>
+            <Text style={styles.botonTexto}>Eliminar póliza de seguro</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={[styles.boton, { backgroundColor: '#ef4444' }]} onPress={() => eliminarDocumento('acta')}>
+            <Text style={styles.botonTexto}>Eliminar acta de compromiso</Text>
+          </TouchableOpacity>
+        </>
+      )}
+    </ScrollView>
   )
 }
 
 const styles = StyleSheet.create({
   container: {
-    padding: 20,
+    paddingTop: 70,
+    padding: 24,
+    alignItems: 'center',
     backgroundColor: '#fff',
-    flexGrow: 1,
   },
-  titulo: {
+  avatar: {
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    borderWidth: 2,
+    borderColor: '#1e40af',
+    marginBottom: 16,
+  },
+  nombre: {
     fontSize: 22,
     fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center',
   },
-  input: {
-    borderWidth: 1,
-    borderColor: '#999',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
+  empresa: {
     fontSize: 16,
+    marginBottom: 20,
+    color: '#475569',
+  },
+  subtitulo: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    alignSelf: 'flex-start',
+    marginBottom: 8,
+  },
+  cardTarea: {
+    backgroundColor: '#f3f4f6',
+    padding: 12,
+    borderRadius: 8,
+    width: '100%',
+    marginBottom: 10,
+  },
+  tareaTitulo: {
+    fontWeight: 'bold',
+  },
+  tareaFecha: {
+    color: '#2563EB',
+    marginTop: 4,
   },
   boton: {
-    backgroundColor: '#2563EB',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  botonArchivo: {
-    backgroundColor: '#ddd',
+    backgroundColor: '#1e40af',
     padding: 12,
-    borderRadius: 12,
+    borderRadius: 8,
+    marginTop: 16,
+    width: '100%',
     alignItems: 'center',
-    marginBottom: 10,
   },
   botonTexto: {
-    fontWeight: 'bold',
-    fontSize: 16,
     color: '#fff',
-  },
-  nombreArchivo: {
-    fontSize: 14,
-    marginBottom: 10,
-    color: '#333',
-    textAlign: 'center',
+    fontWeight: 'bold',
   },
 })

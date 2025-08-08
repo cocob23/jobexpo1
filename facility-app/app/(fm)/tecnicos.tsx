@@ -2,12 +2,12 @@ import { supabase } from '@/constants/supabase'
 import { router } from 'expo-router'
 import { useEffect, useState } from 'react'
 import {
-    ActivityIndicator,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
 } from 'react-native'
 
 export default function ListaTecnicos() {
@@ -40,7 +40,7 @@ export default function ListaTecnicos() {
       `${t.nombre} ${t.apellido}`.toLowerCase().includes(busqueda.toLowerCase())
     )
     setFiltrados(filtro)
-  }, [busqueda])
+  }, [busqueda, tecnicos])
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
