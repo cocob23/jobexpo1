@@ -42,7 +42,25 @@ export default function ListaTecnicos() {
 
   return (
     <div style={styles.container}>
-      <h2 style={styles.titulo}>técnicos de mantenimiento</h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1rem' }}>
+        <button
+          onClick={() => navigate('/fm')}
+          style={{
+            backgroundColor: '#6b7280',
+            color: 'white',
+            border: 'none',
+            padding: '10px 16px',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: '600',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          ← Volver
+        </button>
+        <h2 style={{ ...styles.titulo, margin: 0, flex: 1 }}>técnicos de mantenimiento</h2>
+      </div>
 
       <input
         type="text"
@@ -59,7 +77,7 @@ export default function ListaTecnicos() {
           <div
             key={tecnico.id}
             style={styles.card}
-            onClick={() => navigate(`/fm/perfil-tecnico?id=${tecnico.id}`)}
+            onClick={() => navigate(`/fm/perfil-tecnico/${tecnico.id}`)}
           >
             <p style={styles.cardNombre}>{tecnico.nombre} {tecnico.apellido}</p>
           </div>

@@ -42,11 +42,29 @@ export default function ListaTecnicos() {
 
   return (
     <div style={styles.container}>
-      <h2 style={styles.titulo}>técnicos de mantenimiento</h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1rem' }}>
+        <button
+          onClick={() => navigate('/superadmin')}
+          style={{
+            backgroundColor: '#6b7280',
+            color: 'white',
+            border: 'none',
+            padding: '10px 16px',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: '600',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          ← Volver
+        </button>
+        <h2 style={{ ...styles.titulo, margin: 0, flex: 1 }}>Técnicos de mantenimiento</h2>
+      </div>
 
       <input
         type="text"
-        placeholder="buscar por nombre o apellido"
+        placeholder="Buscar por nombre o apellido"
         value={busqueda}
         onChange={(e) => setBusqueda(e.target.value)}
         style={styles.input}

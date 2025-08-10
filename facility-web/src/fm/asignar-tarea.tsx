@@ -1,8 +1,10 @@
 // src/fm/asignar-tarea.tsx
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 export default function AsignarTarea() {
+  const navigate = useNavigate()
   const [usuarios, setUsuarios] = useState<any[]>([])
   const [usuarioSeleccionado, setUsuarioSeleccionado] = useState('')
   const [busqueda, setBusqueda] = useState('')
@@ -79,7 +81,25 @@ export default function AsignarTarea() {
 
   return (
     <div style={{ padding: '30px', maxWidth: '600px' }}>
-      <h2>Asignar Tarea</h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+        <button
+          onClick={() => navigate('/fm')}
+          style={{
+            backgroundColor: '#6b7280',
+            color: 'white',
+            border: 'none',
+            padding: '10px 16px',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: '600',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          ← Volver
+        </button>
+        <h2 style={{ margin: 0, flex: 1 }}>Asignar Tarea</h2>
+      </div>
 
       <input type="text" placeholder="Buscar técnico" value={busqueda} onChange={e => setBusqueda(e.target.value)} style={{ width: '100%', padding: '10px', marginBottom: '10px' }} />
       <div>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
@@ -22,6 +22,7 @@ type Tarea = {
 export default function PerfilTecnicoFM() {
   console.log('Componente PerfilTecnicoFM montado')
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const [tecnico, setTecnico] = useState<Tecnico | null>(null)
   const [tareas, setTareas] = useState<Tarea[]>([])
   const [loading, setLoading] = useState(true)

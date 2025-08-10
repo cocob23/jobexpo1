@@ -44,7 +44,25 @@ export default function VerTareas() {
 
   return (
     <div style={{ padding: '30px' }}>
-      <h2 style={{ marginBottom: '20px' }}>Tareas Asignadas</h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+        <button
+          onClick={() => navigate('/superadmin')}
+          style={{
+            backgroundColor: '#6b7280',
+            color: 'white',
+            border: 'none',
+            padding: '10px 16px',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: '600',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          ← Volver
+        </button>
+        <h2 style={{ margin: 0, flex: 1 }}>Tareas Asignadas</h2>
+      </div>
 
       <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
         <button

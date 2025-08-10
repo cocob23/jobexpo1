@@ -1,67 +1,90 @@
+// src/superadmin/crear-tecnico.tsx
 import { useState } from 'react'
-import { supabase } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 
 export default function CrearTecnico() {
+  const navigate = useNavigate()
   const [nombre, setNombre] = useState('')
   const [apellido, setApellido] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [mensaje, setMensaje] = useState('')
-  const navigate = useNavigate()
+  const [cargando, setCargando] = useState(false)
 
   const crearTecnico = async () => {
+    setMensaje('')
     if (!email || !password || !nombre || !apellido) {
-      setMensaje('completá todos los campos')
-      return
+      setMensaje('Completá todos los campos'); return
+    }
+    if (password.length < 6) {
+      setMensaje('La contraseña debe tener al menos 6 caracteres'); return
     }
 
-    const emailLimpio = email.trim().toLowerCase()
+    setCargando(true)
+    try {
+      // token de la sesión actual para autorizar la Edge Function
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        setMensaje('No hay sesión válida'); return
+      }
 
-    const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
-      email: emailLimpio,
-      password,
-      email_confirm: true,
-    })
+      // Llamamos a la función server-side (crea en Auth + inserta en usuarios)
+      const resp = await fetch(
+        `${process.env.REACT_APP_SUPABASE_URL}/functions/v1/crear-usuario`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+            // En funciones conviene mandar también el anon key
+            'apikey': process.env.REACT_APP_SUPABASE_ANON_KEY as string,
+          },
+          body: JSON.stringify({
+            email: email.trim().toLowerCase(),
+            password,
+            nombre,
+            apellido,
+            rol: 'mantenimiento', // ← técnico
+          }),
+        }
+      )
 
-    if (authError) {
-      setMensaje(`error al crear usuario: ${authError.message}`)
-      return
-    }
+      const json = await resp.json().catch(() => ({}))
+      if (!resp.ok) {
+        setMensaje(`Error: ${json?.error || 'No se pudo crear el usuario'}`)
+        return
+      }
 
-    const userId = authUser.user?.id
-
-    const { error: insertError } = await supabase.from('usuarios').insert({
-      id: userId,
-      email: emailLimpio,
-      nombre,
-      apellido,
-      rol: 'mantenimiento',
-    })
-
-    if (insertError) {
-      setMensaje(`error al guardar en tabla usuarios: ${insertError.message}`)
-    } else {
-      setMensaje('técnico creado con éxito ✅')
-      setNombre('')
-      setApellido('')
-      setEmail('')
-      setPassword('')
+      setMensaje('Técnico creado con éxito ✅')
+      setNombre(''); setApellido(''); setEmail(''); setPassword('')
+    } catch (e: any) {
+      setMensaje(`Error inesperado: ${String(e?.message || e)}`)
+      console.error(e)
+    } finally {
+      setCargando(false)
     }
   }
 
   return (
     <div style={styles.contenedor}>
-      <h2>crear nuevo técnico</h2>
+      <div style={styles.headerContainer}>
+        <button onClick={() => navigate('/superadmin')} style={styles.botonVolver}>
+          ← Volver
+        </button>
+        <h2 style={styles.titulo}>Crear nuevo técnico</h2>
+      </div>
 
-      <input placeholder="nombre" value={nombre} onChange={e => setNombre(e.target.value)} style={styles.input} />
-      <input placeholder="apellido" value={apellido} onChange={e => setApellido(e.target.value)} style={styles.input} />
-      <input placeholder="email" value={email} onChange={e => setEmail(e.target.value)} style={styles.input} />
-      <input placeholder="contraseña" type="password" value={password} onChange={e => setPassword(e.target.value)} style={styles.input} />
+      <input placeholder="Nombre" value={nombre} onChange={e => setNombre(e.target.value)} style={styles.input} />
+      <input placeholder="Apellido" value={apellido} onChange={e => setApellido(e.target.value)} style={styles.input} />
+      <input placeholder="Email" type="email" value={email} onChange={e => setEmail(e.target.value)} style={styles.input} />
+      <input placeholder="Contraseña" type="password" value={password} onChange={e => setPassword(e.target.value)} style={styles.input} />
 
-      <button onClick={crearTecnico} style={styles.boton}>crear técnico</button>
+      <button onClick={crearTecnico} style={styles.boton} disabled={cargando}>
+        {cargando ? 'Creando...' : 'Crear técnico'}
+      </button>
 
-      {mensaje && <p>{mensaje}</p>}
+      {mensaje && <p style={{ marginTop: 8 }}>{mensaje}</p>}
     </div>
   )
 }
@@ -69,7 +92,7 @@ export default function CrearTecnico() {
 const styles: { [key: string]: React.CSSProperties } = {
   contenedor: {
     padding: '2rem',
-    maxWidth: '400px',
+    maxWidth: '420px',
     margin: 'auto',
     display: 'flex',
     flexDirection: 'column',
@@ -78,7 +101,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   input: {
     padding: '10px',
     borderRadius: '8px',
-    border: '1px solid #ccc',
+    border: '1px solid #cbd5e1',
   },
   boton: {
     padding: '12px',
@@ -89,5 +112,28 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: 'bold',
     cursor: 'pointer',
   },
+  headerContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1rem',
+    marginBottom: '1rem',
+  },
+  titulo: {
+    fontSize: '1.8rem',
+    fontWeight: 700,
+    marginBottom: 0,
+    color: '#1e293b',
+    textAlign: 'center',
+    flex: 1,
+  },
+  botonVolver: {
+    backgroundColor: '#6b7280',
+    color: 'white',
+    border: 'none',
+    padding: '8px 14px',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
 }
-

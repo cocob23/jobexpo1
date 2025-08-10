@@ -1,45 +1,66 @@
+// src/superadmin/crear-usuario.tsx
 import { useState } from 'react'
-import {
-  Alert,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native'
-import { supabaseAdmin } from '../../constants/supabaseAdmin'
+import { useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 
-const rolesDisponibles = ['limpieza', 'mantenimiento', 'fm', 'superadmin', 'comercial']
+type Rol = 'mantenimiento' | 'fm' | 'limpieza' | 'superadmin'
 
-export default function CrearUsuarioScreen() {
+export default function CrearUsuario() {
+  const navigate = useNavigate()
   const [nombre, setNombre] = useState('')
   const [apellido, setApellido] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [rol, setRol] = useState('limpieza')
+  const [rol, setRol] = useState<Rol>('mantenimiento')
+  const [mensaje, setMensaje] = useState('')
+  const [cargando, setCargando] = useState(false)
+  const [verPass, setVerPass] = useState(false)
+
+  const generarPassword = () => {
+    // Simple generator: 10 chars con números y letras
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789'
+    let p = ''
+    for (let i = 0; i < 10; i++) p += chars[Math.floor(Math.random() * chars.length)]
+    setPassword(p)
+  }
 
   const crearUsuario = async () => {
-    if (!email || !password || !nombre || !apellido || !rol) {
-      Alert.alert('Error', 'Completá todos los campos')
+    setMensaje('')
+    if (!email || !password || !nombre || !apellido) {
+      setMensaje('Completá todos los campos')
+      return
+    }
+    if (password.length < 6) {
+      setMensaje('La contraseña debe tener al menos 6 caracteres')
       return
     }
 
+    setCargando(true)
     const emailLimpio = email.trim().toLowerCase()
 
-    const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    // 1) Crear en Auth (con email confirmado y user_metadata con rol)
+    const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
       email: emailLimpio,
       password,
       email_confirm: true,
+      user_metadata: { rol, nombre, apellido },
     })
 
     if (authError) {
-      Alert.alert('Error al crear usuario', authError.message)
+      setMensaje(`Error al crear usuario (Auth): ${authError.message}`)
+      setCargando(false)
       return
     }
 
     const userId = authUser.user?.id
+    if (!userId) {
+      setMensaje('No se obtuvo el ID del usuario recién creado')
+      setCargando(false)
+      return
+    }
 
-    const { error: insertError } = await supabaseAdmin.from('usuarios').insert({
+    // 2) Insert en tabla usuarios
+    const { error: insertError } = await supabase.from('usuarios').insert({
       id: userId,
       email: emailLimpio,
       nombre,
@@ -48,146 +69,180 @@ export default function CrearUsuarioScreen() {
     })
 
     if (insertError) {
-      Alert.alert('Error al guardar en tabla usuarios', insertError.message)
-    } else {
-      Alert.alert('Usuario creado con éxito')
-      setNombre('')
-      setApellido('')
-      setEmail('')
-      setPassword('')
-      setRol('limpieza')
+      // 2b) Si falla el insert en la tabla, borro el usuario de Auth para no dejarlo huérfano
+      await supabase.auth.admin.deleteUser(userId)
+      setMensaje(`Error al guardar en tabla usuarios: ${insertError.message}`)
+      setCargando(false)
+      return
     }
+
+    setMensaje('Usuario creado con éxito ✅')
+    setNombre('')
+    setApellido('')
+    setEmail('')
+    setPassword('')
+    setRol('mantenimiento')
+    setCargando(false)
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.titulo}>Crear nuevo usuario</Text>
+    <div style={styles.wrapper}>
+      <div style={styles.header}>
+        <button onClick={() => navigate('/superadmin')} style={styles.botonVolver}>
+          ← Volver
+        </button>
+        <h2 style={styles.titulo}>Crear usuario</h2>
+      </div>
 
-      <TextInput
-        placeholder="Nombre"
-        value={nombre}
-        placeholderTextColor="#999"
-        onChangeText={setNombre}
-        style={styles.input}
-      />
+      <div style={styles.card}>
+        <div style={styles.row}>
+          <input
+            placeholder="Nombre"
+            value={nombre}
+            onChange={e => setNombre(e.target.value)}
+            style={styles.input}
+          />
+          <input
+            placeholder="Apellido"
+            value={apellido}
+            onChange={e => setApellido(e.target.value)}
+            style={styles.input}
+          />
+        </div>
 
-      <TextInput
-        placeholder="Apellido"
-        value={apellido}
-        placeholderTextColor="#999"
-        onChangeText={setApellido}
-        style={styles.input}
-      />
+        <input
+          placeholder="Email"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          style={styles.input}
+          type="email"
+        />
 
-      <TextInput
-        placeholder="Email"
-        value={email}
-        placeholderTextColor="#999"
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-        style={styles.input}
-      />
+        <div style={styles.row}>
+          <input
+            placeholder="Contraseña"
+            type={verPass ? 'text' : 'password'}
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            style={{ ...styles.input, flex: 1 }}
+          />
+          <button type="button" onClick={() => setVerPass(v => !v)} style={styles.btnSec}>
+            {verPass ? 'Ocultar' : 'Ver'}
+          </button>
+          <button type="button" onClick={generarPassword} style={styles.btnSec}>
+            Generar
+          </button>
+        </div>
 
-      <TextInput
-        placeholder="Contraseña"
-        value={password}
-        placeholderTextColor="#999"
-        onChangeText={setPassword}
-        secureTextEntry
-        style={styles.input}
-        textContentType="password"
-      />
+        <label style={styles.label}>Rol</label>
+        <select value={rol} onChange={e => setRol(e.target.value as Rol)} style={styles.select}>
+          <option value="mantenimiento">Mantenimiento</option>
+          <option value="fm">Facility Manager</option>
+          <option value="limpieza">Limpieza</option>
+          <option value="superadmin">Superadmin</option>
+        </select>
 
-      <Text style={styles.label}>Seleccioná un rol:</Text>
-      <View style={styles.rolesContainer}>
-        {rolesDisponibles.map((r) => (
-          <TouchableOpacity
-            key={r}
-            onPress={() => setRol(r)}
-            style={[
-              styles.rolBoton,
-              rol === r && styles.rolSeleccionado,
-            ]}
-          >
-            <Text style={[
-              styles.rolTexto,
-              rol === r && styles.rolTextoSeleccionado,
-            ]}>
-              {r.charAt(0).toUpperCase() + r.slice(1)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+        <button onClick={crearUsuario} style={styles.boton} disabled={cargando}>
+          {cargando ? 'Creando...' : 'Crear usuario'}
+        </button>
 
-      <TouchableOpacity style={styles.boton} onPress={crearUsuario}>
-        <Text style={styles.botonTexto}>Crear usuario</Text>
-      </TouchableOpacity>
-    </View>
+        {mensaje && <p style={styles.mensaje}>{mensaje}</p>}
+      </div>
+    </div>
   )
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 24,
-    justifyContent: 'center',
-    backgroundColor: '#fff',
+const styles: { [k: string]: React.CSSProperties } = {
+  wrapper: {
+    padding: '30px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+  },
+  header: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    width: '100%',
+    maxWidth: '560px',
+    marginBottom: '16px',
+  },
+  botonVolver: {
+    backgroundColor: '#6b7280',
+    color: 'white',
+    border: 'none',
+    padding: '8px 14px',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: 600,
+    cursor: 'pointer',
   },
   titulo: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 20,
+    margin: 0,
+    fontSize: '1.6rem',
+    fontWeight: 700,
+    color: '#1e293b',
+    flex: 1,
     textAlign: 'center',
   },
+  card: {
+    backgroundColor: '#ffffff',
+    width: '100%',
+    maxWidth: '560px',
+    borderRadius: '14px',
+    padding: '18px',
+    boxShadow: '0 6px 20px rgba(0,0,0,0.08)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  row: {
+    display: 'flex',
+    gap: '12px',
+  },
   input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 14,
+    flex: 1,
+    padding: '10px 12px',
+    borderRadius: '10px',
+    border: '1px solid #cbd5e1',
+    outline: 'none',
   },
   label: {
-    fontSize: 14,
-    marginBottom: 8,
-    fontWeight: 'bold',
+    fontSize: '0.9rem',
+    color: '#334155',
+    fontWeight: 600,
+    marginTop: '4px',
   },
-  rolesContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 20,
-  },
-  rolBoton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#2563EB',
+  select: {
+    width: '100%',
+    padding: '10px 12px',
+    borderRadius: '10px',
+    border: '1px solid #cbd5e1',
+    outline: 'none',
     backgroundColor: '#fff',
-    marginRight: 10,
-    marginBottom: 10,
-  },
-  rolSeleccionado: {
-    backgroundColor: '#2563EB',
-  },
-  rolTexto: {
-    color: '#2563EB',
-    fontWeight: 'bold',
-    textTransform: 'capitalize',
-  },
-  rolTextoSeleccionado: {
-    color: '#fff',
   },
   boton: {
+    marginTop: '8px',
+    padding: '12px',
     backgroundColor: '#2563EB',
-    padding: 14,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginTop: 12,
+    color: 'white',
+    border: 'none',
+    borderRadius: '10px',
+    fontWeight: 700,
+    cursor: 'pointer',
   },
-  botonTexto: {
-    color: '#fff',
-    fontWeight: 'bold',
+  btnSec: {
+    padding: '10px 12px',
+    backgroundColor: '#e5e7eb',
+    color: '#111827',
+    border: 'none',
+    borderRadius: '10px',
+    fontWeight: 600,
+    cursor: 'pointer',
   },
-})
+  mensaje: {
+    marginTop: '6px',
+    color: '#2563EB',
+    fontWeight: 500,
+  },
+}

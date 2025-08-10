@@ -13,6 +13,8 @@ import CrearTecnicoFM from './fm/crear-tecnico'
 import ListaTecnicosFM from './fm/tecnicos'
 import PerfilFM from './fm/perfil'
 import PerfilTecnicoFM from './fm/perfil-tecnico'
+import DetalleTareaFM from './fm/detalle-tarea-fm'
+import LlegadasFM from './fm/llegadas'
 
 // Superadmin
 import SuperadminLayout from './superadmin/SuperadminLayout'
@@ -24,6 +26,7 @@ import PerfilSuperadmin from './superadmin/perfil'
 import PerfilTecnicoSA from './superadmin/perfil-tecnico'
 import AsignarTareaSA from './superadmin/asignar-tarea'
 import VerTareasSA from './superadmin/ver-tareas'
+import LlegadasSA from './superadmin/llegadas'
 
 // Utils
 import ProtectedRoute from './components/ProtectedRoute'
@@ -52,6 +55,7 @@ export default function App() {
           <Route path="tickets" element={<TicketsSA />} />
           <Route path="perfil" element={<PerfilSuperadmin />} />
           <Route path="perfil-tecnico/:id" element={<PerfilTecnicoSA />} />
+          <Route path="llegadas" element={<LlegadasSA />} />
 
         </Route>
 
@@ -71,6 +75,8 @@ export default function App() {
           <Route path="tecnicos" element={<ListaTecnicosFM />} />
           <Route path="perfil" element={<PerfilFM />} />
           <Route path="perfil-tecnico/:id" element={<PerfilTecnicoFM />} />
+          <Route path="detalle-tarea/:id" element={<DetalleTareaFM />} />
+          <Route path="llegadas" element={<LlegadasFM />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" />} />
