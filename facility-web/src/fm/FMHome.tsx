@@ -54,6 +54,8 @@ export default function FMHome() {
             <span>Crear Técnico</span>
           </button>
 
+
+
           <button style={styles.card} onClick={() => navigate('/fm/tickets')}>
             <FaTicketAlt size={32} />
             <span>Ver Tickets</span>

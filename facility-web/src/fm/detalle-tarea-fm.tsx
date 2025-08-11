@@ -168,9 +168,6 @@ export default function DetalleTareaFM() {
   if (loading) {
     return (
       <div style={styles.wrapper}>
-        <div style={styles.logoTopContainer}>
-          <img src="/logo.png" alt="Facility Argentina" style={styles.logoTop} />
-        </div>
         <div style={styles.container}>
           <p>Cargando tarea...</p>
         </div>
@@ -181,9 +178,6 @@ export default function DetalleTareaFM() {
   if (error) {
     return (
       <div style={styles.wrapper}>
-        <div style={styles.logoTopContainer}>
-          <img src="/logo.png" alt="Facility Argentina" style={styles.logoTop} />
-        </div>
         <div style={styles.container}>
           <p style={{ color: 'red' }}>{error}</p>
           <button onClick={obtenerTarea} style={styles.boton}>
@@ -196,10 +190,6 @@ export default function DetalleTareaFM() {
 
   return (
     <div style={styles.wrapper}>
-      <div style={styles.logoTopContainer}>
-        <img src="/logo.png" alt="Facility Argentina" style={styles.logoTop} />
-      </div>
-
       <div style={styles.container}>
         <div style={styles.headerContainer}>
           <button onClick={() => navigate('/fm/ver-tareas')} style={styles.botonVolver}>
@@ -319,16 +309,7 @@ const styles: { [key: string]: React.CSSProperties } = {
     minHeight: '100vh',
     backgroundColor: '#f8fafc',
   },
-  logoTopContainer: {
-    display: 'flex',
-    justifyContent: 'center',
-    paddingTop: 30,
-    paddingBottom: 10,
-  },
-  logoTop: {
-    height: 80,
-    objectFit: 'contain',
-  },
+
   container: {
     maxWidth: '800px',
     margin: '0 auto',

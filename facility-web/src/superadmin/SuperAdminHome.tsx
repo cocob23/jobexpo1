@@ -33,9 +33,9 @@ export default function SuperadminIndex() {
         <p style={styles.subtitle}>Bienvenido, Superadmin. ¿Qué querés hacer hoy?</p>
 
         <div style={styles.grid}>
-          <button style={styles.card} onClick={() => navigate('/superadmin/crear-tecnico')}>
+          <button style={styles.card} onClick={() => navigate('/superadmin/crear-usuario')}>
             <FaUserPlus size={32} />
-            <span>Crear Técnico</span>
+            <span>Crear Usuario</span>
           </button>
 
           <button style={styles.card} onClick={() => navigate('/superadmin/tecnicos')}>
@@ -58,10 +58,6 @@ export default function SuperadminIndex() {
             <span>Ver Tickets</span>
           </button>
 
-          <button style={styles.card} onClick={() => navigate('/superadmin/perfil')}>
-            <FaUserCircle size={32} />
-            <span>Perfil Superadmin</span>
-          </button>
 
           <button style={styles.card} onClick={() => navigate('/superadmin/tecnicos')}>
             <FaUserTie size={32} />
@@ -78,7 +74,7 @@ export default function SuperadminIndex() {
   )
 }
 
-const NAVBAR_HEIGHT = 70 // ajustá si tu navbar mide distinto
+const NAVBAR_HEIGHT = 70
 
 const styles: { [key: string]: React.CSSProperties } = {
   wrapper: {
@@ -86,7 +82,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     width: '100vw',
     backgroundColor: '#fff',
     overflow: 'hidden',
-    // Deja espacio para la navbar fija y coloca el contenido arriba
     paddingTop: NAVBAR_HEIGHT + 16,
     boxSizing: 'border-box',
     display: 'flex',
@@ -115,7 +110,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
     gap: 16,
-    // Limita la altura para que no aparezca scroll “muerto”
     maxHeight: `calc(100vh - ${NAVBAR_HEIGHT + 16 + 60 + 28}px)`,
     overflow: 'auto',
     paddingBottom: 4,
@@ -129,11 +123,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     flexDirection: 'column',
     alignItems: 'center',
     gap: 12,
-    fontSize: 16,
-    fontWeight: 600,
-    color: '#1e293b',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
-    boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+    minHeight: 120,
+    justifyContent: 'center',
+    textAlign: 'center',
   },
-}
+} 

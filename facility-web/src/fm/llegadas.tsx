@@ -98,10 +98,6 @@ export default function Llegadas() {
 
   return (
     <div style={styles.wrapper}>
-      <div style={styles.logoTopContainer}>
-        <img src="/logo.png" alt="Facility Argentina" style={styles.logoTop} />
-      </div>
-
       <div style={styles.container}>
         <div style={styles.headerContainer}>
           <button onClick={() => navigate('/fm')} style={styles.botonVolver}>
@@ -232,8 +228,7 @@ export default function Llegadas() {
 
 const styles: { [key: string]: React.CSSProperties } = {
   wrapper: { minHeight: '100vh', backgroundColor: '#f8fafc' },
-  logoTopContainer: { display: 'flex', justifyContent: 'center', paddingTop: 30, paddingBottom: 10 },
-  logoTop: { height: 80, objectFit: 'contain' },
+
   container: { maxWidth: '1000px', margin: '0 auto', padding: '2rem', fontFamily: `'Segoe UI', sans-serif` },
 
   headerContainer: {

@@ -1,52 +1,79 @@
 import { useState } from 'react'
-import { supabaseAdmin } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
+import { supabaseAdmin } from '../lib/supabase'
 
-export default function CrearTecnico() {
+const rolesDisponibles = ['limpieza', 'mantenimiento', 'fm', 'superadmin', 'comercial']
+
+export default function CrearUsuario() {
+  const navigate = useNavigate()
   const [nombre, setNombre] = useState('')
   const [apellido, setApellido] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [rol, setRol] = useState('limpieza')
   const [mensaje, setMensaje] = useState('')
-  const navigate = useNavigate()
+  const [cargando, setCargando] = useState(false)
 
-  const crearTecnico = async () => {
-    if (!email || !password || !nombre || !apellido) {
-      setMensaje('completá todos los campos')
+  const crearUsuario = async () => {
+    if (!email || !password || !nombre || !apellido || !rol) {
+      setMensaje('Completá todos los campos')
       return
     }
 
-    const emailLimpio = email.trim().toLowerCase()
+    setCargando(true)
+    setMensaje('')
 
-    const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: emailLimpio,
-      password,
-      email_confirm: true,
-    })
+    // Debug: verificar que supabaseAdmin esté disponible
+    console.log('supabaseAdmin disponible:', !!supabaseAdmin)
+    console.log('supabaseAdmin.auth disponible:', !!supabaseAdmin?.auth)
 
-    if (authError) {
-      setMensaje(`error al crear usuario: ${authError.message}`)
-      return
-    }
+    try {
+      const emailLimpio = email.trim().toLowerCase()
 
-    const userId = authUser.user?.id
+      // Usar admin.createUser para crear usuario directamente sin confirmación
+      const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email: emailLimpio,
+        password,
+        email_confirm: true,
+      })
 
-    const { error: insertError } = await supabaseAdmin.from('usuarios').insert({
-      id: userId,
-      email: emailLimpio,
-      nombre,
-      apellido,
-      rol: 'mantenimiento',
-    })
+      if (authError) {
+        console.error('Error en auth.admin.createUser:', authError)
+        setMensaje(`Error al crear usuario: ${authError.message}`)
+        return
+      }
 
-    if (insertError) {
-      setMensaje(`error al guardar en tabla usuarios: ${insertError.message}`)
-    } else {
-      setMensaje('técnico creado con éxito ✅')
-      setNombre('')
-      setApellido('')
-      setEmail('')
-      setPassword('')
+      const userId = authUser.user?.id
+      if (!userId) {
+        setMensaje('Error: No se pudo obtener el ID del usuario creado')
+        return
+      }
+
+      // Insertar en la tabla usuarios
+      const { error: insertError } = await supabaseAdmin.from('usuarios').insert({
+        id: userId,
+        email: emailLimpio,
+        nombre,
+        apellido,
+        rol,
+      })
+
+      if (insertError) {
+        console.error('Error al insertar en usuarios:', insertError)
+        setMensaje(`Error al guardar en tabla usuarios: ${insertError.message}`)
+      } else {
+        setMensaje('Usuario creado con éxito ✅')
+        setNombre('')
+        setApellido('')
+        setEmail('')
+        setPassword('')
+        setRol('limpieza')
+      }
+    } catch (error) {
+      console.error('Error inesperado:', error)
+      setMensaje(`Error inesperado: ${error}`)
+    } finally {
+      setCargando(false)
     }
   }
 
@@ -54,10 +81,10 @@ export default function CrearTecnico() {
     <div style={styles.wrapper}>
       <div style={styles.contenedor}>
         <div style={styles.headerContainer}>
-          <button onClick={() => navigate('/fm')} style={styles.botonVolver}>
+          <button onClick={() => navigate('/superadmin')} style={styles.botonVolver}>
             ← Volver
           </button>
-          <h2 style={styles.titulo}>Crear Nuevo Técnico</h2>
+          <h2 style={styles.titulo}>Crear Nuevo Usuario</h2>
         </div>
 
         <input
@@ -118,21 +145,44 @@ export default function CrearTecnico() {
           }}
         />
 
+        <div style={styles.rolesContainer}>
+          <label style={styles.label}>Seleccioná un rol:</label>
+          <div style={styles.rolesGrid}>
+            {rolesDisponibles.map((r) => (
+              <button
+                key={r}
+                onClick={() => setRol(r)}
+                style={{
+                  ...styles.rolBoton,
+                  ...(rol === r ? styles.rolSeleccionado : {})
+                }}
+              >
+                {r.charAt(0).toUpperCase() + r.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <button
-          onClick={crearTecnico}
+          onClick={crearUsuario}
           style={styles.boton}
+          disabled={cargando}
           onMouseOver={(e) => {
-            e.currentTarget.style.backgroundColor = '#1d4ed8'
-            e.currentTarget.style.transform = 'translateY(-1px)'
-            e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)'
+            if (!cargando) {
+              e.currentTarget.style.backgroundColor = '#1d4ed8'
+              e.currentTarget.style.transform = 'translateY(-1px)'
+              e.currentTarget.style.boxShadow = '0 4px 8px rgba(0,0,0,0.15)'
+            }
           }}
           onMouseOut={(e) => {
-            e.currentTarget.style.backgroundColor = '#1e40af'
-            e.currentTarget.style.transform = 'translateY(0)'
-            e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)'
+            if (!cargando) {
+              e.currentTarget.style.backgroundColor = '#1e40af'
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)'
+            }
           }}
         >
-          ➕ Crear Técnico
+          {cargando ? 'Creando...' : '➕ Crear Usuario'}
         </button>
 
         {mensaje && (
@@ -175,6 +225,38 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s ease',
     backgroundColor: 'white',
     boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+  },
+  label: {
+    fontSize: '16px',
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: '8px',
+  },
+  rolesContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+  },
+  rolesGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+    gap: '10px',
+  },
+  rolBoton: {
+    padding: '12px 16px',
+    borderRadius: '8px',
+    border: '2px solid #2563EB',
+    backgroundColor: '#fff',
+    color: '#2563EB',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    textTransform: 'capitalize',
+  },
+  rolSeleccionado: {
+    backgroundColor: '#2563EB',
+    color: '#fff',
   },
   boton: {
     padding: '16px 24px',
@@ -225,4 +307,3 @@ const styles: { [key: string]: React.CSSProperties } = {
     boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
   },
 }
-
