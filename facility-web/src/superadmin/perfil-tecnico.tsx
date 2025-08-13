@@ -1,3 +1,4 @@
+// src/superadmin/perfil-tecnico.tsx
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -19,8 +20,28 @@ type Tarea = {
   fecha_realizacion: string
 }
 
-export default function PerfilTecnicoFM() {
-  console.log('Componente PerfilTecnicoFM montado')
+type Planilla = {
+  id: number
+  usuario_id: string
+  tipo: 'gestion' | 'gastos'
+  periodo: string
+  bucket: string        // 'planillas_gestion' | 'planillas_gastos'
+  archivo_path: string  // ej: <uid>/YYYY-MM.xlsx
+  archivo_mimetype: string
+  creado_en: string
+}
+
+const BUCKETS: Record<'gestion' | 'gastos', string> = {
+  gestion: 'planillas_gestion',
+  gastos: 'planillas_gastos',
+}
+
+const TIPO_LABEL: Record<'gestion' | 'gastos', string> = {
+  gestion: 'Planilla de gestión (fin de mes)',
+  gastos: 'Planilla de gastos (fin de mes)',
+}
+
+export default function PerfilTecnicoSA() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [tecnico, setTecnico] = useState<Tecnico | null>(null)
@@ -28,66 +49,56 @@ export default function PerfilTecnicoFM() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // ---- Planillas (solo lectura para SA) ----
+  const [busyPlanillas, setBusyPlanillas] = useState(false)
+  const [periodo, setPeriodo] = useState<string>(() => dayjs().format('YYYY-MM'))
+  const [planillasMes, setPlanillasMes] = useState<Record<'gestion' | 'gastos', Planilla | null>>({
+    gestion: null,
+    gastos: null,
+  })
+
   useEffect(() => {
-    console.log('useEffect ejecutado, id:', id)
     if (id) {
-      console.log('Llamando a fetchDatos con id:', id)
       fetchDatos()
     } else {
-      console.log('No hay ID, estableciendo loading en false')
       setLoading(false)
     }
   }, [id])
 
-  const fetchDatos = async () => {
-    console.log('fetchDatos ejecutado')
-    if (!id) {
-      console.log('No hay ID, retornando')
-      return
+  useEffect(() => {
+    if (id) {
+      cargarPlanillasMes(id, periodo)
     }
-    
-    console.log('Iniciando carga de datos...')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, periodo])
+
+  const fetchDatos = async () => {
+    if (!id) return
     setLoading(true)
     setError(null)
-    
+
     try {
-      console.log('Buscando usuario con ID:', id)
-      console.log('Tipo de ID:', typeof id)
-      
       const { data: usuario, error: errorUsuario } = await supabase
         .from('usuarios')
         .select('id, nombre, apellido')
         .eq('id', id)
         .single()
 
-      console.log('Respuesta de Supabase - data:', usuario)
-      console.log('Respuesta de Supabase - error:', errorUsuario)
-
       if (errorUsuario) {
-        console.error('Error al buscar usuario:', errorUsuario)
-        console.error('Detalles del error:', {
-          message: errorUsuario.message,
-          details: errorUsuario.details,
-          hint: errorUsuario.hint
-        })
         setError(`Error al cargar datos del técnico: ${errorUsuario.message}`)
         setLoading(false)
         return
       }
-
       if (!usuario) {
-        console.error('No se encontró usuario con ID:', id)
         setError('Técnico no encontrado')
         setLoading(false)
         return
       }
 
-      console.log('Usuario encontrado:', usuario)
-
+      // Avatar (último archivo en /avatars/<id>/)
       const { data: files } = await supabase.storage.from('avatars').list(`${id}`, {
-        sortBy: { column: 'created_at', order: 'desc' }
+        sortBy: { column: 'created_at', order: 'desc' },
       })
-
       let avatar_url = ''
       if (files && files.length > 0) {
         const latestFile = files[0].name
@@ -96,7 +107,13 @@ export default function PerfilTecnicoFM() {
         avatar_url = avatar?.publicUrl || ''
       }
 
-      setTecnico({ id: usuario.id, nombre: usuario.nombre, apellido: usuario.apellido, empresa: null, avatar_url })
+      setTecnico({
+        id: usuario.id,
+        nombre: usuario.nombre,
+        apellido: usuario.apellido,
+        empresa: null,
+        avatar_url,
+      })
 
       const { data: tareasProximas } = await supabase
         .from('trabajos_mantenimiento')
@@ -107,226 +124,200 @@ export default function PerfilTecnicoFM() {
 
       setTareas(tareasProximas || [])
 
-      const { data: doc } = await supabase
-        .from('documentos_tecnicos')
-        .select('*')
-        .eq('tecnico_id', id)
-        .maybeSingle()
+      // Si en el futuro querés mostrar algo de documentos_tecnicos:
+      await supabase.from('documentos_tecnicos').select('*').eq('tecnico_id', id).maybeSingle()
 
-      console.log('Documentos cargados:', doc)
       setLoading(false)
-      console.log('Datos cargados exitosamente')
-    } catch (error) {
-      console.error('Error en fetchDatos:', error)
+    } catch (err) {
+      console.error('Error en fetchDatos:', err)
       setError('Error al cargar los datos')
       setLoading(false)
     }
   }
 
+  // ------- Planillas: carga y abrir en nueva pestaña -------
+  async function cargarPlanillasMes(uid: string, per: string) {
+    setBusyPlanillas(true)
+    try {
+      const { data, error } = await supabase
+        .from('planillas_ext')
+        .select('*')
+        .eq('usuario_id', uid)
+        .eq('periodo', per)
+
+      if (error) throw error
+
+      const base: Record<'gestion' | 'gastos', Planilla | null> = { gestion: null, gastos: null }
+      ;(data || []).forEach((p: Planilla) => {
+        base[p.tipo] = p
+      })
+      setPlanillasMes(base)
+    } catch (e: any) {
+      alert(e.message || 'No se pudieron cargar las planillas del técnico.')
+    } finally {
+      setBusyPlanillas(false)
+    }
+  }
+
+  async function verPlanilla(p: Planilla | null) {
+    if (!p) {
+      alert('Todavía no hay archivo para este período.')
+      return
+    }
+    const { data, error } = await supabase.storage.from(p.bucket).createSignedUrl(p.archivo_path, 60 * 5)
+    if (error || !data?.signedUrl) {
+      console.error('SignedUrl error:', error)
+      alert('No se pudo generar el enlace.')
+      return
+    }
+
+    const fileName = fileNameFromPath(p.archivo_path)
+    const urlConDescarga = data.signedUrl.includes('?')
+      ? `${data.signedUrl}&download=${encodeURIComponent(fileName)}`
+      : `${data.signedUrl}?download=${encodeURIComponent(fileName)}`
+
+    const w = window.open(urlConDescarga, '_blank', 'noopener,noreferrer')
+    if (w) return
+
+    // Fallback si bloquean el popup
+    try {
+      const a = document.createElement('a')
+      a.href = urlConDescarga
+      a.target = '_blank'
+      a.rel = 'noopener noreferrer'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      return
+    } catch {
+      // Último recurso: descarga por blob
+      try {
+        const resp = await fetch(data.signedUrl)
+        const blob = await resp.blob()
+        const blobUrl = URL.createObjectURL(blob)
+        const a2 = document.createElement('a')
+        a2.href = blobUrl
+        a2.download = fileName
+        document.body.appendChild(a2)
+        a2.click()
+        a2.remove()
+        URL.revokeObjectURL(blobUrl)
+      } catch (e) {
+        alert('No se pudo abrir ni descargar el archivo.')
+      }
+    }
+  }
+
+  // ------- Documentos (póliza/acta) - tu lógica actual -------
   const descargar = async (tipo: 'poliza' | 'acta') => {
     if (!id) {
       alert('No hay ID de técnico')
       return
     }
-
     const bucket = tipo === 'poliza' ? 'polizas' : 'actacompromiso'
     const path = `${id}/${tipo}.pdf`
-    
-    console.log('Intentando descargar:', bucket, path)
-    
+
     try {
-      // Primero verificar si el archivo existe
-      const { data: listData, error: listError } = await supabase.storage
-        .from(bucket)
-        .list(`${id}`)
-      
+      const { data: listData, error: listError } = await supabase.storage.from(bucket).list(`${id}`)
       if (listError) {
-        console.error('Error al listar archivos:', listError)
         alert('Error al verificar archivos')
         return
       }
-      
-      const fileExists = listData?.some(file => file.name === `${tipo}.pdf`)
+      const fileExists = listData?.some((file) => file.name === `${tipo}.pdf`)
       if (!fileExists) {
         alert(`No existe ${tipo === 'poliza' ? 'la póliza' : 'el acta'}`)
         return
       }
-      
-      // Obtener la URL pública
       const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(path)
-      
       if (!urlData?.publicUrl) {
-        console.error('No se pudo obtener la URL pública')
         alert('Error al generar el enlace de descarga')
         return
       }
-      
-      console.log('URL de descarga:', urlData.publicUrl)
-      
-      // Intentar descargar usando fetch para verificar que el archivo existe
+
+      // Descarga por blob (y fallback a abrir en pestaña)
       try {
-        const response = await fetch(urlData.publicUrl, { method: 'HEAD' })
-        if (!response.ok) {
-          console.error('Archivo no encontrado en URL:', response.status)
-          alert('El archivo no está disponible para descarga')
+        const head = await fetch(urlData.publicUrl, { method: 'HEAD' })
+        if (!head.ok) throw new Error(`HTTP ${head.status}`)
+
+        const resp = await fetch(urlData.publicUrl)
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+
+        const blob = await resp.blob()
+        if (blob.size === 0) {
+          alert('El archivo descargado está vacío')
           return
         }
-        
-        console.log('Archivo verificado, abriendo...')
-        
-        // Intentar descargar el archivo directamente
-        try {
-          const downloadResponse = await fetch(urlData.publicUrl)
-          if (!downloadResponse.ok) {
-            throw new Error(`HTTP ${downloadResponse.status}`)
-          }
-          
-          const blob = await downloadResponse.blob()
-          console.log('Archivo descargado, tamaño:', blob.size)
-          
-          if (blob.size === 0) {
-            alert('El archivo descargado está vacío')
-            return
-          }
-          
-          // Crear URL del blob y descargar
-          const blobUrl = URL.createObjectURL(blob)
-          const link = document.createElement('a')
-          link.href = blobUrl
-          link.download = `${tipo}.pdf`
-          document.body.appendChild(link)
-          link.click()
-          document.body.removeChild(link)
-          URL.revokeObjectURL(blobUrl)
-          
-        } catch (downloadError) {
-          console.error('Error al descargar archivo:', downloadError)
-          // Fallback: abrir en nueva pestaña
-          window.open(urlData.publicUrl, '_blank')
-        }
-      } catch (fetchError) {
-        console.error('Error al verificar archivo:', fetchError)
-        // Intentar abrir directamente de todas formas
+        const blobUrl = URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = blobUrl
+        link.download = `${tipo}.pdf`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        URL.revokeObjectURL(blobUrl)
+      } catch {
         window.open(urlData.publicUrl, '_blank')
       }
-      
     } catch (error) {
-      console.error('Error al descargar archivo:', error)
       alert('Error al descargar el archivo')
     }
   }
 
   const eliminar = async (tipo: 'poliza' | 'acta') => {
     if (!id) return
-
     const confirmado = window.confirm(`¿Está seguro que desea eliminar la ${tipo}?`)
     if (!confirmado) return
-
     const bucket = tipo === 'poliza' ? 'polizas' : 'actacompromiso'
     const path = `${id}/${tipo}.pdf`
-
     const { error: errorRemove } = await supabase.storage.from(bucket).remove([path])
     if (errorRemove) {
       alert('Error eliminando el archivo')
       return
     }
-
     const campo = tipo === 'poliza' ? 'poliza_url' : 'acta_compromiso_url'
-    await supabase
-      .from('documentos_tecnicos')
-      .update({ [campo]: null })
-      .eq('tecnico_id', id)
-
+    await supabase.from('documentos_tecnicos').update({ [campo]: null }).eq('tecnico_id', id)
     fetchDatos()
   }
 
-    const subir = async (tipo: 'poliza' | 'acta') => {
+  const subir = async (tipo: 'poliza' | 'acta') => {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = 'application/pdf'
     input.onchange = async (e: any) => {
       const file = e.target.files[0]
-      if (!file || !id) {
-        console.log('No se seleccionó archivo o no hay ID')
-        return
-      }
-
-      console.log('Archivo seleccionado:', file.name, 'Tamaño:', file.size)
-
+      if (!file || !id) return
       try {
-        console.log('Iniciando lectura del archivo...')
-        
-        // Usar FileReader para leer el archivo como ArrayBuffer
         const reader = new FileReader()
-        
         reader.onload = async (event) => {
           const result = event.target?.result
-          if (!result) {
-            console.error('No se pudo leer el archivo')
-            alert('Error al leer el archivo')
-            return
-          }
-          
-          console.log('Archivo leído, tipo:', typeof result)
-          if (result instanceof ArrayBuffer) {
-            console.log('Tamaño del ArrayBuffer:', result.byteLength)
-            
-            if (result.byteLength === 0) {
-              alert('El archivo está vacío')
-              return
-            }
-          } else {
-            console.error('Resultado no es ArrayBuffer:', typeof result)
+          if (!(result instanceof ArrayBuffer)) {
             alert('Error al procesar el archivo')
             return
           }
-
           const bucket = tipo === 'poliza' ? 'polizas' : 'actacompromiso'
           const path = `${id}/${tipo}.pdf`
-
-          console.log('Subiendo archivo a:', bucket, path)
-
-                    const { data: uploadData, error: uploadError } = await supabase.storage
+          const { error: uploadError } = await supabase.storage
             .from(bucket)
-            .upload(path, result, {
-              contentType: 'application/pdf',
-              upsert: true,
-            })
-
+            .upload(path, result, { contentType: 'application/pdf', upsert: true })
           if (uploadError) {
-            console.error('Error al subir archivo:', uploadError)
             alert(`Error subiendo archivo: ${uploadError.message}`)
             return
           }
-
-          console.log('Archivo subido exitosamente:', uploadData)
-
           const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path)
           const campo = tipo === 'poliza' ? 'poliza_url' : 'acta_compromiso_url'
-          
           const { error: upsertError } = await supabase.from('documentos_tecnicos').upsert([
             { tecnico_id: id, [campo]: pub?.publicUrl },
           ])
-
           if (upsertError) {
-            console.error('Error al guardar URL en BD:', upsertError)
             alert('Error al guardar la URL del archivo')
             return
           }
-
-          console.log('URL guardada en BD exitosamente')
           alert('Archivo subido exitosamente')
           fetchDatos()
         }
-        
-        reader.onerror = () => {
-          console.error('Error al leer el archivo')
-          alert('Error al leer el archivo')
-        }
-        
+        reader.onerror = () => alert('Error al leer el archivo')
         reader.readAsArrayBuffer(file)
-      } catch (error) {
-        console.error('Error inesperado al subir archivo:', error)
+      } catch {
         alert('Error inesperado al subir archivo')
       }
     }
@@ -335,6 +326,13 @@ export default function PerfilTecnicoFM() {
 
   return (
     <div style={styles.container}>
+      <div style={styles.headerContainer}>
+        <button onClick={() => navigate('/superadmin/tecnicos')} style={styles.botonVolver}>
+          ← Volver
+        </button>
+        <h1 style={styles.titulo}>Perfil del Técnico</h1>
+      </div>
+
       {loading ? (
         <p>Cargando técnico...</p>
       ) : error ? (
@@ -345,16 +343,63 @@ export default function PerfilTecnicoFM() {
       ) : tecnico ? (
         <>
           <img
-            src={
-              tecnico.avatar_url ||
-              'https://ui-avatars.com/api/?name=User'
-            }
+            src={tecnico.avatar_url || 'https://ui-avatars.com/api/?name=User'}
             alt="avatar"
             style={styles.avatar}
           />
-          <h2>{tecnico.nombre} {tecnico.apellido}</h2>
+          <h2>
+            {tecnico.nombre} {tecnico.apellido}
+          </h2>
           <p>Empresa asignada: {tecnico.empresa || 'Sin asignar'}</p>
 
+          {/* ---------- Planillas del técnico (solo lectura para SA) ---------- */}
+          <div style={planillasUI.wrapper}>
+            <h3 style={planillasUI.title}>Planillas del técnico</h3>
+            <div style={planillasUI.periodRow}>
+              <label style={{ marginRight: 8, color: '#1e293b' }}>Período (YYYY-MM)</label>
+              <input
+                type="month"
+                value={periodo}
+                onChange={(e) => setPeriodo(e.target.value)}
+                style={planillasUI.monthInput}
+              />
+              <button
+                onClick={() => cargarPlanillasMes(tecnico.id, periodo)}
+                disabled={busyPlanillas}
+                style={planillasUI.secondaryBtn}
+              >
+                Recargar
+              </button>
+            </div>
+
+            {(['gestion', 'gastos'] as const).map((tipo) => {
+              const current = planillasMes[tipo]
+              return (
+                <div key={tipo} style={planillasUI.card}>
+                  <div style={planillasUI.cardHead}>
+                    <div style={planillasUI.cardTitle}>{TIPO_LABEL[tipo]}</div>
+                    <div style={planillasUI.actions}>
+                      <button
+                        style={{ ...planillasUI.secondaryBtn, ...(current ? {} : planillasUI.disabledBtn) }}
+                        onClick={() => verPlanilla(current)}
+                        disabled={!current || busyPlanillas}
+                      >
+                        {current ? 'Ver / Descargar' : 'Sin archivo'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {current && (
+                    <div style={planillasUI.meta}>
+                      Archivo: {fileNameFromPath(current.archivo_path)} • {current.archivo_mimetype}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* ---------- Próximas tareas ---------- */}
           <h3>Próximas tareas</h3>
           {tareas.length === 0 ? (
             <p>Sin tareas próximas</p>
@@ -367,10 +412,11 @@ export default function PerfilTecnicoFM() {
             ))
           )}
 
+          {/* ---------- Documentos (póliza/acta) ---------- */}
           <h3>Documentos</h3>
           <div style={styles.buttonContainer}>
-            <button 
-              style={styles.uploadButton} 
+            <button
+              style={styles.uploadButton}
               onClick={() => subir('poliza')}
               onMouseOver={(e) => {
                 e.currentTarget.style.backgroundColor = '#1d4ed8'
@@ -385,8 +431,8 @@ export default function PerfilTecnicoFM() {
             >
               📄 Subir póliza
             </button>
-            <button 
-              style={styles.uploadButton} 
+            <button
+              style={styles.uploadButton}
               onClick={() => subir('acta')}
               onMouseOver={(e) => {
                 e.currentTarget.style.backgroundColor = '#1d4ed8'
@@ -401,8 +447,8 @@ export default function PerfilTecnicoFM() {
             >
               📄 Subir acta
             </button>
-            <button 
-              style={styles.downloadButton} 
+            <button
+              style={styles.downloadButton}
               onClick={() => descargar('poliza')}
               onMouseOver={(e) => {
                 e.currentTarget.style.backgroundColor = '#047857'
@@ -417,8 +463,8 @@ export default function PerfilTecnicoFM() {
             >
               ⬇️ Descargar póliza
             </button>
-            <button 
-              style={styles.downloadButton} 
+            <button
+              style={styles.downloadButton}
               onClick={() => descargar('acta')}
               onMouseOver={(e) => {
                 e.currentTarget.style.backgroundColor = '#047857'
@@ -433,8 +479,8 @@ export default function PerfilTecnicoFM() {
             >
               ⬇️ Descargar acta compromiso
             </button>
-            <button 
-              style={styles.deleteButton} 
+            <button
+              style={styles.deleteButton}
               onClick={() => eliminar('poliza')}
               onMouseOver={(e) => {
                 e.currentTarget.style.backgroundColor = '#b91c1c'
@@ -449,8 +495,8 @@ export default function PerfilTecnicoFM() {
             >
               🗑️ Eliminar póliza
             </button>
-            <button 
-              style={styles.deleteButton} 
+            <button
+              style={styles.deleteButton}
               onClick={() => eliminar('acta')}
               onMouseOver={(e) => {
                 e.currentTarget.style.backgroundColor = '#b91c1c'
@@ -474,6 +520,13 @@ export default function PerfilTecnicoFM() {
   )
 }
 
+/* Helpers */
+function fileNameFromPath(p: string) {
+  const parts = p.split('/')
+  return parts[parts.length - 1] || p
+}
+
+/* Estilos */
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
     maxWidth: 600,
@@ -481,12 +534,39 @@ const styles: { [key: string]: React.CSSProperties } = {
     padding: 24,
     fontFamily: 'sans-serif',
   },
+  headerContainer: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1rem',
+    marginBottom: '2rem',
+  },
+  titulo: {
+    fontSize: '2.2rem',
+    fontWeight: 700,
+    marginBottom: '0',
+    color: '#1e293b',
+    textAlign: 'center',
+    flex: 1,
+  },
+  botonVolver: {
+    backgroundColor: '#6b7280',
+    color: 'white',
+    border: 'none',
+    padding: '12px 20px',
+    borderRadius: '8px',
+    fontSize: '14px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+  },
   avatar: {
     width: 130,
     height: 130,
     borderRadius: '50%',
     border: '3px solid #1e40af',
     marginBottom: 16,
+    objectFit: 'cover',
   },
   tareaCard: {
     backgroundColor: '#f3f4f6',
@@ -536,4 +616,39 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s ease',
     boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
   },
+}
+
+const planillasUI: Record<string, React.CSSProperties> = {
+  wrapper: { marginTop: 24, marginBottom: 12 },
+  title: { fontSize: 18, fontWeight: 700, color: '#1e293b', marginBottom: 8 },
+  periodRow: { display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' },
+  monthInput: {
+    background: '#fff',
+    color: '#1e293b',
+    border: '2px solid #e2e8f0',
+    borderRadius: 8,
+    padding: '8px 10px',
+    outline: 'none',
+  },
+  card: {
+    background: '#ffffff',
+    border: '2px solid #e2e8f0',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 12,
+    boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
+  },
+  cardHead: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' },
+  cardTitle: { fontSize: 16, fontWeight: 700, color: '#1e293b' },
+  actions: { display: 'flex', gap: 8, alignItems: 'center' },
+  secondaryBtn: {
+    background: '#f8fafc',
+    color: '#1f2937',
+    border: '2px solid #e2e8f0',
+    borderRadius: 10,
+    padding: '8px 14px',
+    cursor: 'pointer',
+  },
+  disabledBtn: { opacity: 0.5, cursor: 'not-allowed' },
+  meta: { marginTop: 8, fontSize: 12, color: '#475569' },
 }

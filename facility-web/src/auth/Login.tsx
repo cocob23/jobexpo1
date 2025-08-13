@@ -18,19 +18,37 @@ export default function Login() {
       return
     }
 
-    const { data: perfil } = await supabase
+    // Log para depuración
+    console.log('Usuario autenticado:', data.user)
+
+    const { data: perfil, error: perfilError } = await supabase
       .from('usuarios')
       .select('rol')
       .eq('id', data.user.id)
       .single()
 
-    const rol = perfil?.rol
+    // Log para depuración
+    console.log('Perfil obtenido:', perfil)
+    if (perfilError) {
+      alert('Error obteniendo perfil: ' + perfilError.message)
+      return
+    }
+    if (!perfil) {
+      alert('No se encontró el perfil de usuario en la tabla usuarios.')
+      return
+    }
+
+    const rol = perfil.rol
 
     if (rol === 'superadmin') navigate('/superadmin')
     else if (rol === 'fm') navigate('/fm')
     else if (rol === 'mantenimiento') navigate('/mantenimiento')
     else if (rol === 'limpieza') navigate('/limpieza')
-    else navigate('/login')
+    else if (rol === 'mantenimiento-externo') navigate('/mantenimiento-externo')
+    else {
+      alert('Rol no reconocido: ' + rol)
+      navigate('/login')
+    }
   }
 
   return (

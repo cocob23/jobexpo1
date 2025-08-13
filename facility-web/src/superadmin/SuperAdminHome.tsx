@@ -8,7 +8,8 @@ import {
   FaUserCircle,
   FaUsersCog,
   FaClipboardList,
-  FaMapMarkerAlt
+  FaMapMarkerAlt,
+  FaCalculator
 } from 'react-icons/fa'
 
 export default function SuperadminIndex() {
@@ -67,6 +68,11 @@ export default function SuperadminIndex() {
           <button style={styles.card} onClick={() => navigate('/superadmin/llegadas')}>
             <FaMapMarkerAlt size={32} />
             <span>Ver Llegadas</span>
+          </button>
+
+          <button style={styles.card} onClick={() => navigate('/superadmin/cotizaciones')}>
+            <FaCalculator size={32} />
+            <span>Gestionar Cotizaciones</span>
           </button>
         </div>
       </div>

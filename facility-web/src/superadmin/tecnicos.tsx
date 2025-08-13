@@ -24,7 +24,7 @@ export default function ListaTecnicos() {
     const { data, error } = await supabase
       .from('usuarios')
       .select('id, nombre, apellido')
-      .eq('rol', 'mantenimiento')
+      .in('rol', ['mantenimiento','mantenimiento-externo'])
 
     if (!error && data) {
       setTecnicos(data)

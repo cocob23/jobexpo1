@@ -49,6 +49,15 @@ export default function Layout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="cotizaciones"
+        options={{
+          title: 'Cotizaciones',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="document-text-outline" size={size} color={color} />
+          ),
+        }}
+      />
     </Tabs>
   )
 }

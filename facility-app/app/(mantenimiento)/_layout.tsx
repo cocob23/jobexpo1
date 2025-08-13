@@ -26,6 +26,7 @@ export default function Layout() {
       <Tabs.Screen name="tareas" options={{ title: 'Tareas' }} />
       <Tabs.Screen name="tickets" options={{ title: 'Tickets' }} />
       <Tabs.Screen name="inventario" options={{ title: 'Inventario' }} />
+      <Tabs.Screen name="planillas" options={{ title: 'Planillas' }} />
       <Tabs.Screen name="perfil" options={{ title: 'Perfil' }} />
 
       {/* oculta del tab bar, pero accesible vía router.push */}

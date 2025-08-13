@@ -40,6 +40,15 @@ export default function SuperadminTabsLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="cotizaciones"
+        options={{
+          title: 'Cotizaciones',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="calculator-outline" size={size} color={color} />
+          ),
+        }}
+      />
     </Tabs>
   )
 }

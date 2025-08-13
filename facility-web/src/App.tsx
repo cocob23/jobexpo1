@@ -16,6 +16,7 @@ import PerfilTecnicoFM from './fm/perfil-tecnico'
 import DetalleTareaFM from './fm/detalle-tarea-fm'
 import LlegadasFM from './fm/llegadas'
 import TicketsFM from './fm/tickets'
+import CotizacionesFM from './fm/cotizaciones'
 
 // Superadmin
 import SuperadminLayout from './superadmin/SuperadminLayout'
@@ -28,6 +29,13 @@ import PerfilTecnicoSA from './superadmin/perfil-tecnico'
 import AsignarTareaSA from './superadmin/asignar-tarea'
 import VerTareasSA from './superadmin/ver-tareas'
 import LlegadasSA from './superadmin/llegadas'
+import CotizacionesSuperadmin from './superadmin/cotizaciones'
+
+// Mantenimiento Externo
+import TecnicosExternosLayout from './mantenimiento-externo/TecnicosExternosLayout'
+import PlanillasTecnicosExternos from './mantenimiento-externo/planillas'
+import MantenimientoExternoHome from './mantenimiento-externo/Home'
+import PerfilExterno from './mantenimiento-externo/perfil' // ⬅️ nuevo
 
 // Utils
 import ProtectedRoute from './components/ProtectedRoute'
@@ -47,17 +55,17 @@ export default function App() {
               <SuperadminLayout />
             </ProtectedRoute>
           }
-                                >
-                          <Route index element={<SuperadminHome />} />
-                          <Route path="crear-usuario" element={<CrearUsuarioSA />} />
-                          <Route path="tecnicos" element={<TecnicosSA />} />
+        >
+          <Route index element={<SuperadminHome />} />
+          <Route path="crear-usuario" element={<CrearUsuarioSA />} />
+          <Route path="tecnicos" element={<TecnicosSA />} />
           <Route path="asignar-tarea" element={<AsignarTareaSA />} />
           <Route path="ver-tareas" element={<VerTareasSA />} />
           <Route path="tickets" element={<TicketsSA />} />
           <Route path="perfil" element={<PerfilSuperadmin />} />
           <Route path="perfil-tecnico/:id" element={<PerfilTecnicoSA />} />
           <Route path="llegadas" element={<LlegadasSA />} />
-
+          <Route path="cotizaciones" element={<CotizacionesSuperadmin />} />
         </Route>
 
         {/* RUTAS FM */}
@@ -79,7 +87,25 @@ export default function App() {
           <Route path="detalle-tarea/:id" element={<DetalleTareaFM />} />
           <Route path="llegadas" element={<LlegadasFM />} />
           <Route path="tickets" element={<TicketsFM />} />
+          <Route path="cotizaciones" element={<CotizacionesFM />} />
         </Route>
+
+        {/* RUTAS MANTENIMIENTO EXTERNO (con navbar/layout) */}
+        <Route
+          path="/mantenimiento-externo"
+          element={
+            <ProtectedRoute>
+              <TecnicosExternosLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<MantenimientoExternoHome />} />
+          <Route path="planillas" element={<PlanillasTecnicosExternos />} />
+          <Route path="perfil" element={<PerfilExterno />} /> {/* ⬅️ nuevo */}
+        </Route>
+
+        {/* Redirección de la ruta vieja (si alguien entra por /tecnicos-externos) */}
+        <Route path="/tecnicos-externos" element={<Navigate to="/mantenimiento-externo" replace />} />
 
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
