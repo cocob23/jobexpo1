@@ -11,7 +11,6 @@ export default function Index() {
       try {
         const { data: { session } } = await supabase.auth.getSession()
         const { data: userData } = await supabase.auth.getUser()
-
         const user = userData?.user
 
         if (!session || !user) {
@@ -26,14 +25,22 @@ export default function Index() {
           .eq('id', user.id)
           .single()
 
-        if (perfil?.rol === 'limpieza') setRedirect('/(limpieza)')
-        else if (perfil?.rol === 'mantenimiento') setRedirect('/(mantenimiento)')
-        else if (perfil?.rol === 'fm') setRedirect('/(fm)')
-        else if (perfil?.rol === 'superadmin') setRedirect('/(superadmin)')
-        else {
-          await supabase.auth.signOut()
+        if (error) {
+          console.log('Error RLS/SELECT usuarios:', error)
+          // No cierres sesión por esto; mostrás login solo si realmente no hay sesión.
           setRedirect('/login')
+          return
         }
+
+        const rol = perfil?.rol
+
+        if (rol === 'limpieza') setRedirect('/(limpieza)')
+        else if (rol === 'mantenimiento') setRedirect('/(mantenimiento)')
+        else if (rol === 'mantenimiento-externo') setRedirect('/(mantenimiento-externo)')
+        else if (rol === 'fm') setRedirect('/(fm)')
+        else if (rol === 'superadmin') setRedirect('/(superadmin)')
+        else if (rol === 'comercial') setRedirect('/(ejecutivo-comercial)')
+        else setRedirect('/login')
       } catch (err) {
         console.error('Error validando sesión', err)
         await supabase.auth.signOut()
@@ -47,6 +54,5 @@ export default function Index() {
   }, [])
 
   if (checking || !redirect) return null
-
   return <Redirect href={redirect} />
 }

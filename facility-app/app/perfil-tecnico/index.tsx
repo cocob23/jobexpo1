@@ -15,77 +15,124 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
+  Linking,
 } from 'react-native'
 
 dayjs.locale('es')
-global.Buffer = Buffer
+global.Buffer = Buffer as any
+
+type Planilla = {
+  id: number
+  usuario_id: string
+  tipo: 'gestion' | 'gastos'
+  periodo: string
+  bucket: string
+  archivo_path: string
+  archivo_mimetype: string
+  creado_en: string
+}
+
+const TIPO_LABEL: Record<'gestion' | 'gastos', string> = {
+  gestion: 'Planilla de gestión (fin de mes)',
+  gastos: 'Planilla de gastos (fin de mes)',
+}
 
 export default function PerfilTecnico() {
   const { id } = useLocalSearchParams()
-  const [tecnico, setTecnico] = useState(null)
-  const [tareas, setTareas] = useState([])
-  const [documentos, setDocumentos] = useState(null)
+  const [tecnico, setTecnico] = useState<any>(null)
+  const [tareas, setTareas] = useState<any[]>([])
+  const [documentos, setDocumentos] = useState<any>(null)
   const [refreshing, setRefreshing] = useState(false)
+
+  const [planillasMes, setPlanillasMes] = useState<Record<'gestion' | 'gastos', Planilla | null>>({
+    gestion: null,
+    gastos: null,
+  })
+  const periodoActual = dayjs().format('YYYY-MM')
 
   useEffect(() => {
     if (id) fetchDatos()
   }, [id])
 
   const fetchDatos = async () => {
-    const { data: usuario, error: errorUsuario } = await supabase
-      .from('usuarios')
-      .select('id, nombre, apellido')
-      .eq('id', id)
-      .single()
+    try {
+      // Datos del técnico (empresa puede ser null)
+      const { data: usuario, error: errorUsuario } = await supabase
+        .from('usuarios')
+        .select('id, nombre, apellido, empresa')
+        .eq('id', id)
+        .single()
 
-    if (errorUsuario) {
-      console.error('Error obteniendo datos del técnico:', errorUsuario)
+      if (errorUsuario) {
+        console.log('Error usuarios:', errorUsuario)
+        Alert.alert('Error', 'No se pudo obtener el técnico.')
+        return
+      }
+
+      // Avatar
+      let avatar_url: string | null = null
+      const { data: files, error: listError } = await supabase.storage
+        .from('avatars')
+        .list(`${usuario.id}`, {
+          limit: 100,
+          sortBy: { column: 'created_at', order: 'desc' },
+        })
+
+      if (!listError && files && files.length > 0) {
+        const latestFile = files[0].name
+        const avatarPath = `${usuario.id}/${latestFile}`
+        const { data: avatarData, error: avatarUrlError } = await supabase.storage
+          .from('avatars')
+          .getPublicUrl(avatarPath)
+        if (!avatarUrlError) avatar_url = avatarData.publicUrl
+      }
+
+      setTecnico({ ...usuario, avatar_url })
+
+      // Próximas tareas
+      const { data: tareasProximas, error: errorTareas } = await supabase
+        .from('trabajos_mantenimiento')
+        .select('*')
+        .eq('usuario_id', id)
+        .gte('fecha_realizacion', new Date().toISOString())
+        .order('fecha_realizacion', { ascending: true })
+
+      if (!errorTareas) setTareas(tareasProximas || [])
+
+      // Documentos (póliza / acta)
+      const { data: doc, error: errorDoc } = await supabase
+        .from('documentos_tecnicos')
+        .select('*')
+        .eq('tecnico_id', id)
+        .maybeSingle()
+      if (!errorDoc) setDocumentos(doc || null)
+
+      // Planillas del mes actual
+      await cargarPlanillasMes(String(id))
+    } catch (e) {
+      console.log('fetchDatos exception:', e)
+      Alert.alert('Error', 'Ocurrió un problema cargando el perfil.')
+    }
+  }
+
+  const cargarPlanillasMes = async (tecnicoId: string) => {
+    const { data, error } = await supabase
+      .from('planillas_ext')
+      .select('*')
+      .eq('usuario_id', tecnicoId)
+      .eq('periodo', periodoActual)
+
+    if (error) {
+      console.log('Error cargarPlanillasMes:', error)
       return
     }
 
-    let avatar_url = null
-    const { data: files, error: listError } = await supabase.storage
-      .from('avatars')
-      .list(`${usuario.id}`, {
-        limit: 100,
-        sortBy: { column: 'created_at', order: 'desc' },
-      })
-
-    if (!listError && files && files.length > 0) {
-      const latestFile = files[0].name
-      const avatarPath = `${usuario.id}/${latestFile}`
-      const { data: avatarData, error: avatarUrlError } = await supabase.storage
-        .from('avatars')
-        .getPublicUrl(avatarPath)
-
-      if (!avatarUrlError) {
-        avatar_url = avatarData.publicUrl
-      }
-    }
-
-    setTecnico({ ...usuario, avatar_url })
-
-    const { data: tareasProximas, error: errorTareas } = await supabase
-      .from('trabajos_mantenimiento')
-      .select('*')
-      .eq('usuario_id', id)
-      .gte('fecha_realizacion', new Date().toISOString())
-      .order('fecha_realizacion', { ascending: true })
-
-    if (!errorTareas) {
-      setTareas(tareasProximas || [])
-    }
-
-    const { data: doc, error: errorDoc } = await supabase
-      .from('documentos_tecnicos')
-      .select('*')
-      .eq('tecnico_id', id)
-      .maybeSingle()
-
-    if (!errorDoc) {
-      setDocumentos(doc)
-    }
+    const base = { gestion: null, gastos: null } as Record<'gestion' | 'gastos', Planilla | null>
+    ;(data || []).forEach((p: Planilla) => {
+      base[p.tipo] = p
+    })
+    setPlanillasMes(base)
   }
 
   const onRefresh = async () => {
@@ -94,7 +141,8 @@ export default function PerfilTecnico() {
     setRefreshing(false)
   }
 
-  const subirDocumento = async (tipo) => {
+  // =================== PÓLIZA / ACTA ===================
+  const subirDocumento = async (tipo: 'poliza' | 'acta') => {
     const result = await DocumentPicker.getDocumentAsync({
       type: 'application/pdf',
       copyToCacheDirectory: true,
@@ -130,13 +178,8 @@ export default function PerfilTecnico() {
 
       if (!uploadRes.ok) {
         const errorText = await uploadRes.text()
-        console.error('❌ Error detallado:', errorText)
-
-        if (errorText.includes('new row violates row-level security policy')) {
-          Alert.alert('Archivo existente', `Debe eliminar la ${tipo === 'poliza' ? 'póliza' : 'acta'} actual antes de subir una nueva.`)
-        } else {
-          Alert.alert('Error', 'Falló la subida del archivo.')
-        }
+        console.error('Upload error:', uploadRes.status, errorText)
+        Alert.alert('Error', 'Falló la subida del archivo.')
         return
       }
 
@@ -148,8 +191,8 @@ export default function PerfilTecnico() {
         .upsert([{ tecnico_id: id, [campo]: url }])
 
       if (error) {
-        console.error('❌ error en upsert:', error)
-        Alert.alert('error', 'no se pudo guardar la URL.')
+        console.error('Upsert documentos_tecnicos error:', error)
+        Alert.alert('Error', 'No se pudo guardar la URL.')
         return
       }
 
@@ -159,14 +202,14 @@ export default function PerfilTecnico() {
         .eq('tecnico_id', id)
 
       setDocumentos(docActualizado)
-      Alert.alert('éxito', `La ${tipo} fue subida correctamente.`)
-    } catch (err) {
-      console.error('❌ error inesperado:', err)
-      Alert.alert('error', err.message || 'ocurrió un error inesperado.')
+      Alert.alert('Éxito', `La ${tipo} fue subida correctamente.`)
+    } catch (err: any) {
+      console.error('subirDocumento exception:', err)
+      Alert.alert('Error', err.message || 'Ocurrió un error inesperado.')
     }
   }
 
-  const descargarArchivo = async (tipo) => {
+  const descargarArchivo = async (tipo: 'poliza' | 'acta') => {
     const bucket = tipo === 'poliza' ? 'polizas' : 'actacompromiso'
     const path = `${id}/${tipo}.pdf`
     const url = `https://lknfaxkigownvjsijzhb.supabase.co/storage/v1/object/public/${bucket}/${path}`
@@ -188,12 +231,12 @@ export default function PerfilTecnico() {
         Alert.alert('Error', `No se pudo descargar la ${tipo}.`)
       }
     } catch (e) {
-      console.error(`❌ error al descargar ${tipo}:`, e)
+      console.error(`descargarArchivo ${tipo} error:`, e)
       Alert.alert('Error', `Ocurrió un error al descargar la ${tipo}.`)
     }
   }
 
-  const eliminarDocumento = async (tipo) => {
+  const eliminarDocumento = async (tipo: 'poliza' | 'acta') => {
     Alert.alert(
       `Eliminar ${tipo}`,
       `¿Está seguro que desea eliminar la ${tipo === 'poliza' ? 'póliza' : 'acta'} actual?`,
@@ -207,7 +250,6 @@ export default function PerfilTecnico() {
             const path = `${id}/${tipo}.pdf`
 
             const { error } = await supabase.storage.from(bucket).remove([path])
-
             if (error) {
               Alert.alert('Error', `No se pudo eliminar la ${tipo}.`)
               return
@@ -224,12 +266,33 @@ export default function PerfilTecnico() {
               return
             }
 
-            setDocumentos((prev) => ({ ...prev, [campo]: null }))
+            setDocumentos((prev: any) => ({ ...prev, [campo]: null }))
             Alert.alert('Éxito', `La ${tipo} fue eliminada correctamente.`)
           },
         },
       ]
     )
+  }
+  // =================== FIN PÓLIZA / ACTA ===================
+
+  const verPlanilla = async (p: Planilla | null) => {
+    if (!p) {
+      Alert.alert('Sin archivo', 'Todavía no hay archivo para este mes.')
+      return
+    }
+
+    const { data, error } = await supabase
+      .storage
+      .from(p.bucket)
+      .createSignedUrl(p.archivo_path, 60 * 5)
+
+    if (error || !data?.signedUrl) {
+      console.log('SignedUrl error:', error)
+      Alert.alert('Error', 'No se pudo generar el enlace.')
+      return
+    }
+
+    Linking.openURL(data.signedUrl)
   }
 
   return (
@@ -241,58 +304,93 @@ export default function PerfilTecnico() {
         <>
           <Image
             source={{
-              uri: tecnico.avatar_url || 'https://ui-avatars.com/api/?name=User&background=ccc&color=000&size=128',
+              uri:
+                tecnico.avatar_url ||
+                'https://ui-avatars.com/api/?name=User&background=ccc&color=000&size=128',
             }}
             style={styles.avatar}
           />
           <Text style={styles.nombre}>{tecnico.nombre} {tecnico.apellido}</Text>
-          <Text style={styles.empresa}>Empresa asignada: {tecnico.empresa || 'Sin asignar'}</Text>
+          <Text style={styles.empresa}>
+            Empresa asignada: {tecnico.empresa ?? 'Sin asignar'}
+          </Text>
 
           <Text style={styles.subtitulo}>Próximas tareas:</Text>
           {tareas.length === 0 ? (
-            <Text style={{ color: '#666' }}>Sin tareas próximas</Text>
+            <Text style={{ color: '#666', alignSelf: 'flex-start' }}>Sin tareas próximas</Text>
           ) : (
-            tareas.map((t, i) => (
+            tareas.map((t: any, i: number) => (
               <View key={i} style={styles.cardTarea}>
                 <Text style={styles.tareaTitulo}>{t.descripcion}</Text>
-                <Text style={styles.tareaFecha}>{dayjs(t.fecha_realizacion).format('DD/MM HH:mm')}hs</Text>
+                <Text style={styles.tareaFecha}>
+                  {dayjs(t.fecha_realizacion).format('DD/MM HH:mm')}hs
+                </Text>
               </View>
             ))
           )}
 
+          {/* Póliza / Acta */}
           <TouchableOpacity style={styles.boton} onPress={() => subirDocumento('poliza')}>
             <Text style={styles.botonTexto}>Subir póliza de seguro</Text>
           </TouchableOpacity>
-
           <TouchableOpacity style={styles.boton} onPress={() => subirDocumento('acta')}>
             <Text style={styles.botonTexto}>Subir acta de compromiso</Text>
           </TouchableOpacity>
-
           <TouchableOpacity style={[styles.boton, { backgroundColor: '#22c55e' }]} onPress={() => descargarArchivo('poliza')}>
             <Text style={styles.botonTexto}>Descargar póliza de seguro</Text>
           </TouchableOpacity>
-
           <TouchableOpacity style={[styles.boton, { backgroundColor: '#22c55e' }]} onPress={() => descargarArchivo('acta')}>
             <Text style={styles.botonTexto}>Descargar acta de compromiso</Text>
           </TouchableOpacity>
-
           <TouchableOpacity style={[styles.boton, { backgroundColor: '#ef4444' }]} onPress={() => eliminarDocumento('poliza')}>
             <Text style={styles.botonTexto}>Eliminar póliza de seguro</Text>
           </TouchableOpacity>
-
           <TouchableOpacity style={[styles.boton, { backgroundColor: '#ef4444' }]} onPress={() => eliminarDocumento('acta')}>
             <Text style={styles.botonTexto}>Eliminar acta de compromiso</Text>
           </TouchableOpacity>
+
+          {/* Planillas */}
+          <Text style={[styles.subtitulo, { marginTop: 24 }]}>
+            Planillas (Periodo {periodoActual})
+          </Text>
+
+          {(['gestion', 'gastos'] as const).map((tipo) => {
+            const p = planillasMes[tipo]
+            return (
+              <View key={tipo} style={styles.cardTarea}>
+                <Text style={styles.tareaTitulo}>{TIPO_LABEL[tipo]}</Text>
+                <Text style={{ color: '#64748b', marginTop: 4 }}>
+                  {p ? `Archivo: ${nombreArchivo(p.archivo_path)} • ${p.archivo_mimetype}` : 'Sin archivo subido este mes'}
+                </Text>
+
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                  <TouchableOpacity
+                    style={[styles.botonMini, !p && styles.botonMiniDisabled]}
+                    onPress={() => verPlanilla(p)}
+                    disabled={!p}
+                  >
+                    <Text style={styles.botonMiniTexto}>{p ? 'Ver / Descargar' : 'Sin archivo'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )
+          })}
         </>
       )}
     </ScrollView>
   )
 }
 
+function nombreArchivo(path: string) {
+  const parts = path.split('/')
+  return parts[parts.length - 1] || path
+}
+
 const styles = StyleSheet.create({
   container: {
     paddingTop: 70,
     padding: 24,
+    paddingBottom: 56,
     alignItems: 'center',
     backgroundColor: '#fff',
   },
@@ -344,5 +442,18 @@ const styles = StyleSheet.create({
   botonTexto: {
     color: '#fff',
     fontWeight: 'bold',
+  },
+  botonMini: {
+    backgroundColor: '#111827',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+  },
+  botonMiniTexto: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  botonMiniDisabled: {
+    opacity: 0.5,
   },
 })

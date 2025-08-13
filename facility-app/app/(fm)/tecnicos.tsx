@@ -8,6 +8,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  View,
 } from 'react-native'
 
 export default function ListaTecnicos() {
@@ -15,6 +16,7 @@ export default function ListaTecnicos() {
   const [busqueda, setBusqueda] = useState('')
   const [filtrados, setFiltrados] = useState<any[]>([])
   const [cargando, setCargando] = useState(true)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
   useEffect(() => {
     obtenerTecnicos()
@@ -22,12 +24,18 @@ export default function ListaTecnicos() {
 
   const obtenerTecnicos = async () => {
     setCargando(true)
+    setErrorMsg(null)
+
     const { data, error } = await supabase
       .from('usuarios')
-      .select('id, nombre, apellido')
-      .eq('rol', 'mantenimiento')
+      .select('id, nombre, apellido, rol')
+      .in('rol', ['mantenimiento', 'mantenimiento-externo']) // 👈 clave
 
-    if (!error) {
+    if (error) {
+      setErrorMsg('No se pudieron cargar los técnicos.')
+      setTecnicos([])
+      setFiltrados([])
+    } else {
       setTecnicos(data || [])
       setFiltrados(data || [])
     }
@@ -36,9 +44,12 @@ export default function ListaTecnicos() {
   }
 
   useEffect(() => {
-    const filtro = tecnicos.filter((t) =>
-      `${t.nombre} ${t.apellido}`.toLowerCase().includes(busqueda.toLowerCase())
-    )
+    const q = busqueda.trim().toLowerCase()
+    const filtro = tecnicos.filter((t) => {
+      const nombre = (t?.nombre || '').toString().toLowerCase()
+      const apellido = (t?.apellido || '').toString().toLowerCase()
+      return `${nombre} ${apellido}`.includes(q)
+    })
     setFiltrados(filtro)
   }, [busqueda, tecnicos])
 
@@ -55,6 +66,12 @@ export default function ListaTecnicos() {
 
       {cargando ? (
         <ActivityIndicator size="large" color="#2563EB" style={{ marginTop: 20 }} />
+      ) : errorMsg ? (
+        <Text style={{ color: '#ef4444', marginTop: 12 }}>{errorMsg}</Text>
+      ) : filtrados.length === 0 ? (
+        <View style={{ marginTop: 12 }}>
+          <Text style={{ color: '#64748b' }}>No se encontraron técnicos.</Text>
+        </View>
       ) : (
         filtrados.map((tecnico) => (
           <TouchableOpacity
@@ -64,6 +81,9 @@ export default function ListaTecnicos() {
           >
             <Text style={styles.cardNombre}>
               {tecnico.nombre} {tecnico.apellido}
+            </Text>
+            <Text style={styles.cardRol}>
+              {tecnico.rol === 'mantenimiento-externo' ? 'Mantenimiento externo' : 'Mantenimiento'}
             </Text>
           </TouchableOpacity>
         ))
@@ -100,5 +120,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#1e40af',
+  },
+  cardRol: {
+    marginTop: 4,
+    color: '#475569',
   },
 })

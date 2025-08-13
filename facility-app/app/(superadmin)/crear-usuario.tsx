@@ -9,14 +9,26 @@ import {
 } from 'react-native'
 import { supabaseAdmin } from '../../constants/supabaseAdmin'
 
-const rolesDisponibles = ['limpieza', 'mantenimiento', 'fm', 'superadmin', 'comercial']
+type Rol = {
+  value: string
+  label: string
+}
+
+const rolesDisponibles: Rol[] = [
+  { value: 'limpieza',             label: 'Limpieza' },
+  { value: 'mantenimiento',        label: 'Mantenimiento' },
+  { value: 'mantenimiento-externo',label: 'Mantenimiento externo' },
+  { value: 'fm',                   label: 'Facility Manager' },
+  { value: 'superadmin',           label: 'Superadmin' },
+  { value: 'comercial',            label: 'Comercial' },
+]
 
 export default function CrearUsuarioScreen() {
   const [nombre, setNombre] = useState('')
   const [apellido, setApellido] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [rol, setRol] = useState('limpieza')
+  const [rol, setRol] = useState<string>('limpieza')
 
   const crearUsuario = async () => {
     if (!email || !password || !nombre || !apellido || !rol) {
@@ -44,7 +56,7 @@ export default function CrearUsuarioScreen() {
       email: emailLimpio,
       nombre,
       apellido,
-      rol,
+      rol, // guarda el value exacto (p.ej. "mantenimiento-externo")
     })
 
     if (insertError) {
@@ -103,18 +115,20 @@ export default function CrearUsuarioScreen() {
       <View style={styles.rolesContainer}>
         {rolesDisponibles.map((r) => (
           <TouchableOpacity
-            key={r}
-            onPress={() => setRol(r)}
+            key={r.value}
+            onPress={() => setRol(r.value)}
             style={[
               styles.rolBoton,
-              rol === r && styles.rolSeleccionado,
+              rol === r.value && styles.rolSeleccionado,
             ]}
           >
-            <Text style={[
-              styles.rolTexto,
-              rol === r && styles.rolTextoSeleccionado,
-            ]}>
-              {r.charAt(0).toUpperCase() + r.slice(1)}
+            <Text
+              style={[
+                styles.rolTexto,
+                rol === r.value && styles.rolTextoSeleccionado,
+              ]}
+            >
+              {r.label}
             </Text>
           </TouchableOpacity>
         ))}
