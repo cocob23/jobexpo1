@@ -1,43 +1,51 @@
-import { supabase } from '@/constants/supabase';
-import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Alert, Image, Pressable, StyleSheet, Text, View } from 'react-native';
-import uuid from 'react-native-uuid';
+import { supabase } from '@/constants/supabase'
+import * as ImagePicker from 'expo-image-picker'
+import { router } from 'expo-router'
+import { useEffect, useState } from 'react'
+import {
+  Alert,
+  Image,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native'
+import uuid from 'react-native-uuid'
 
 export default function PerfilSuperadmin() {
-  const [usuario, setUsuario] = useState<any>(null);
-  const [perfilUsuario, setPerfilUsuario] = useState<any>(null);
+  const [usuario, setUsuario] = useState<any>(null)
+  const [perfilUsuario, setPerfilUsuario] = useState<any>(null)
 
   useEffect(() => {
-    fetchUsuario();
-  }, []);
+    fetchUsuario()
+  }, [])
 
   const fetchUsuario = async () => {
-    const { data } = await supabase.auth.getUser();
-    setUsuario(data?.user);
+    const { data } = await supabase.auth.getUser()
+    setUsuario(data?.user)
 
     if (data?.user?.id) {
       const { data: usuarioTabla } = await supabase
         .from('usuarios')
-        .select('nombre, apellido')
+        .select('nombre, apellido, avatar_path')
         .eq('id', data.user.id)
-        .single();
+        .single()
 
-      setPerfilUsuario(usuarioTabla);
+      setPerfilUsuario(usuarioTabla)
     }
-  };
+  }
 
   const cerrarSesion = async () => {
-    await supabase.auth.signOut();
-    router.replace('/login');
-  };
+    await supabase.auth.signOut()
+    router.replace('/login')
+  }
 
   const cambiarFotoPerfil = async () => {
-    const permiso = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    const permiso = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!permiso.granted) {
-      Alert.alert('Permiso requerido', 'Necesitamos acceso a tus fotos');
-      return;
+      Alert.alert('Permiso requerido', 'Necesitamos acceso a tus fotos')
+      return
     }
 
     const resultado = await ImagePicker.launchImageLibraryAsync({
@@ -45,125 +53,171 @@ export default function PerfilSuperadmin() {
       allowsEditing: true,
       aspect: [1, 1],
       quality: 0.8,
-    });
+    })
 
-    if (resultado.canceled) return;
+    if (resultado.canceled) return
 
-    const imagen = resultado.assets[0];
-
+    const imagen = resultado.assets[0]
     const archivo = {
       uri: imagen.uri,
       name: `${uuid.v4()}.jpg`,
       type: 'image/jpeg',
-    };
+    }
 
-    const userId = usuario?.id;
-    const ruta = `${userId}/${archivo.name}`;
+    const userId = usuario?.id
+    const ruta = `${userId}/${archivo.name}`
 
+    // Subir imagen al bucket
     const { error: errorSubida } = await supabase.storage
       .from('avatars')
-      .upload(ruta, {
-        uri: archivo.uri,
-        name: archivo.name,
-        type: archivo.type,
-      } as any);
+      .upload(ruta, archivo as any)
 
     if (errorSubida) {
-      Alert.alert('Error al subir la imagen', errorSubida.message);
-      return;
+      Alert.alert('Error al subir la imagen', errorSubida.message)
+      return
     }
 
-    const urlPublica = supabase.storage.from('avatars').getPublicUrl(ruta).data.publicUrl;
+    // URL pública
+    const urlPublica = supabase.storage.from('avatars').getPublicUrl(ruta).data.publicUrl
 
-    const { error: errorUpdate } = await supabase.auth.updateUser({
+    // Actualizar metadata del usuario (opcional, útil para RN)
+    const { error: errorUpdateUser } = await supabase.auth.updateUser({
       data: { avatar_url: urlPublica },
-    });
-
-    if (errorUpdate) {
-      Alert.alert('Error al actualizar el perfil', errorUpdate.message);
-      return;
+    })
+    if (errorUpdateUser) {
+      Alert.alert('Error al actualizar perfil (auth)', errorUpdateUser.message)
+      return
     }
 
-    Alert.alert('Foto actualizada', 'Tu nueva foto de perfil fue cargada con éxito');
-    fetchUsuario();
-  };
+    // Guardar path en tabla usuarios (clave para recuperar más tarde)
+    const { error: errorUpdateUsuarios } = await supabase
+      .from('usuarios')
+      .update({ avatar_path: ruta })
+      .eq('id', userId)
+
+    if (errorUpdateUsuarios) {
+      Alert.alert('Error al actualizar perfil (usuarios)', errorUpdateUsuarios.message)
+      return
+    }
+
+    Alert.alert('Foto actualizada', 'Tu nueva foto de perfil fue cargada con éxito')
+    fetchUsuario()
+  }
 
   return (
-    <View style={styles.contenedor}>
-      <Text style={styles.titulo}>Mi perfil</Text>
+    <ScrollView contentContainerStyle={styles.container}>
+      <Image
+        source={require('@/assets/images/logo.png')}
+        style={styles.logo}
+      />
 
       <Pressable onPress={cambiarFotoPerfil} style={styles.avatarContainer}>
         <Image
           source={{
             uri:
-              usuario?.user_metadata?.avatar_url ||
-              'https://ui-avatars.com/api/?name=User&background=ccc&color=000&size=128',
+              perfilUsuario?.avatar_path
+                ? supabase.storage.from('avatars').getPublicUrl(perfilUsuario.avatar_path).data.publicUrl
+                : 'https://ui-avatars.com/api/?name=User&background=ccc&color=000&size=128',
           }}
           style={styles.avatar}
         />
-        <Text style={styles.linkCambiarFoto}>Cambiar foto de perfil</Text>
+        <Text style={styles.linkCambiarFoto}>Cambiar foto</Text>
       </Pressable>
 
-    {perfilUsuario && (
-        <>
-            <Text style={styles.texto}>Nombre: {perfilUsuario.nombre}</Text>
-            <Text style={styles.texto}>Apellido: {perfilUsuario.apellido}</Text>
-        </>
-    )}
-        
+      <View style={styles.card}>
+        {perfilUsuario && (
+          <>
+            <Text style={styles.label}>Nombre:</Text>
+            <Text style={styles.valor}>{perfilUsuario.nombre}</Text>
 
-      {usuario && <Text style={styles.texto}>Email: {usuario.email}</Text>}
+            <Text style={styles.label}>Apellido:</Text>
+            <Text style={styles.valor}>{perfilUsuario.apellido}</Text>
+          </>
+        )}
+
+        {usuario && (
+          <>
+            <Text style={styles.label}>Email:</Text>
+            <Text style={styles.valor}>{usuario.email}</Text>
+          </>
+        )}
+      </View>
 
       <Pressable style={styles.botonCerrar} onPress={cerrarSesion}>
-        <Text style={styles.textoBoton}>Cerrar sesión</Text>
+        <Text style={styles.textoCerrar}>Cerrar sesión</Text>
       </Pressable>
-    </View>
-  );
+    </ScrollView>
+  )
 }
 
 const styles = StyleSheet.create({
-  contenedor: {
-    flex: 1,
-    padding: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+  container: {
+    padding: 24,
     backgroundColor: '#fff',
+    alignItems: 'center',
+    flexGrow: 1,
   },
-  titulo: {
-    fontSize: 26,
-    fontWeight: 'bold',
+  logo: {
+    width: 270,
+    height: 90,
+    resizeMode: 'contain',
+    alignSelf: 'center',
+    marginTop: 30,
     marginBottom: 20,
-  },
-  texto: {
-    fontSize: 16,
-    marginTop: 8,
   },
   avatarContainer: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   avatar: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 2,
-    borderColor: '#ccc',
+    width: 130,
+    height: 130,
+    borderRadius: 65,
+    borderWidth: 3,
+    borderColor: '#1e40af',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
+    elevation: 6,
   },
   linkCambiarFoto: {
     marginTop: 10,
-    color: '#007bff',
+    color: '#2563EB',
+    fontWeight: '600',
     fontSize: 14,
   },
-  botonCerrar: {
-    backgroundColor: '#d9534f',
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    borderRadius: 30,
-    marginTop: 40,
+  card: {
+    backgroundColor: '#f8fafc',
+    width: '100%',
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 30,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  textoBoton: {
+  label: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#475569',
+    marginTop: 10,
+  },
+  valor: {
+    fontSize: 16,
+    color: '#111827',
+  },
+  botonCerrar: {
+    backgroundColor: '#dc2626',
+    paddingVertical: 12,
+    paddingHorizontal: 40,
+    borderRadius: 30,
+  },
+  textoCerrar: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
   },
-});
+})

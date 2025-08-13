@@ -1,16 +1,19 @@
 import { supabase } from '@/constants/supabase'
 import { useEffect, useState } from 'react'
 import {
-    ActivityIndicator,
-    Alert,
-    FlatList,
-    Image,
-    Modal,
-    Pressable,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Image,
+  Modal,
+  Pressable,
+  SafeAreaView,
+  Platform,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native'
 
 export default function TicketsSuperadmin() {
@@ -117,39 +120,57 @@ export default function TicketsSuperadmin() {
 
   if (cargando) {
     return (
-      <View style={styles.loader}>
-        <ActivityIndicator size="large" color="#1e40af" />
-      </View>
+      <SafeAreaView style={styles.safe}>
+        <View style={styles.loader}>
+          <ActivityIndicator size="large" color="#1e40af" />
+        </View>
+      </SafeAreaView>
     )
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.titulo}>Tickets cargados</Text>
-      <FlatList
-        data={tickets}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={{ paddingBottom: 100 }}
-      />
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.container}>
+        <Text style={styles.titulo}>Tickets cargados</Text>
 
-      <Modal visible={!!imagenSeleccionada} transparent>
-        <View style={styles.modalContainer}>
-          <Pressable style={styles.modalBackground} onPress={() => setImagenSeleccionada(null)}>
-            {imagenSeleccionada && (
-              <Image source={{ uri: imagenSeleccionada }} style={styles.imagenExpandida} resizeMode="contain" />
-            )}
-          </Pressable>
-        </View>
-      </Modal>
-    </View>
+        <FlatList
+          data={tickets}
+          keyExtractor={(item) => item.id}
+          renderItem={renderItem}
+          contentContainerStyle={{ paddingBottom: 120, paddingTop: 8 }}
+        />
+
+        <Modal visible={!!imagenSeleccionada} transparent>
+          <View style={styles.modalContainer}>
+            <Pressable
+              style={styles.modalBackground}
+              onPress={() => setImagenSeleccionada(null)}
+            >
+              {imagenSeleccionada && (
+                <Image
+                  source={{ uri: imagenSeleccionada }}
+                  style={styles.imagenExpandida}
+                  resizeMode="contain"
+                />
+              )}
+            </Pressable>
+          </View>
+        </Modal>
+      </View>
+    </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
+  // Safe area + separación para notch
+  safe: {
+    flex: 1,
+    backgroundColor: '#fff',
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 8 : 8,
+  },
   container: {
     flex: 1,
-    padding: 20,
+    paddingHorizontal: 20,
     backgroundColor: '#fff',
   },
   titulo: {
@@ -163,6 +184,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 20,
+    backgroundColor: '#fff',
   },
   imagen: {
     width: '100%',
@@ -226,13 +248,7 @@ const styles = StyleSheet.create({
     textTransform: 'capitalize',
     marginTop: 4,
   },
-  estadoAprobado: {
-    color: 'green',
-  },
-  estadoDesaprobado: {
-    color: 'red',
-  },
-  estadoPendiente: {
-    color: '#ca8a04',
-  },
+  estadoAprobado: { color: 'green' },
+  estadoDesaprobado: { color: 'red' },
+  estadoPendiente: { color: '#ca8a04' },
 })

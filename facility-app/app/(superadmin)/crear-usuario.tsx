@@ -9,18 +9,24 @@ import {
 } from 'react-native'
 import { supabaseAdmin } from '../../constants/supabaseAdmin'
 
+type RolValue =
+  | 'limpieza'
+  | 'mantenimiento'
+  | 'mantenimiento-externo'
+  | 'fm'
+  | 'superadmin'
+
 type Rol = {
-  value: string
+  value: RolValue
   label: string
 }
 
 const rolesDisponibles: Rol[] = [
-  { value: 'limpieza',             label: 'Limpieza' },
-  { value: 'mantenimiento',        label: 'Mantenimiento' },
-  { value: 'mantenimiento-externo',label: 'Mantenimiento externo' },
-  { value: 'fm',                   label: 'Facility Manager' },
-  { value: 'superadmin',           label: 'Superadmin' },
-  { value: 'comercial',            label: 'Comercial' },
+  { value: 'limpieza',              label: 'Limpieza' },
+  { value: 'mantenimiento',         label: 'Mantenimiento' },
+  { value: 'mantenimiento-externo', label: 'Mantenimiento externo' },
+  { value: 'fm',                    label: 'Facility Manager' },
+  { value: 'superadmin',            label: 'Superadmin' },
 ]
 
 export default function CrearUsuarioScreen() {
@@ -28,7 +34,7 @@ export default function CrearUsuarioScreen() {
   const [apellido, setApellido] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [rol, setRol] = useState<string>('limpieza')
+  const [rol, setRol] = useState<RolValue>('limpieza')
 
   const crearUsuario = async () => {
     if (!email || !password || !nombre || !apellido || !rol) {
@@ -38,11 +44,12 @@ export default function CrearUsuarioScreen() {
 
     const emailLimpio = email.trim().toLowerCase()
 
-    const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: emailLimpio,
-      password,
-      email_confirm: true,
-    })
+    const { data: authUser, error: authError } =
+      await supabaseAdmin.auth.admin.createUser({
+        email: emailLimpio,
+        password,
+        email_confirm: true,
+      })
 
     if (authError) {
       Alert.alert('Error al crear usuario', authError.message)
@@ -56,7 +63,7 @@ export default function CrearUsuarioScreen() {
       email: emailLimpio,
       nombre,
       apellido,
-      rol, // guarda el value exacto (p.ej. "mantenimiento-externo")
+      rol, // ahora solo acepta RolValue válidos
     })
 
     if (insertError) {
@@ -117,16 +124,10 @@ export default function CrearUsuarioScreen() {
           <TouchableOpacity
             key={r.value}
             onPress={() => setRol(r.value)}
-            style={[
-              styles.rolBoton,
-              rol === r.value && styles.rolSeleccionado,
-            ]}
+            style={[styles.rolBoton, rol === r.value && styles.rolSeleccionado]}
           >
             <Text
-              style={[
-                styles.rolTexto,
-                rol === r.value && styles.rolTextoSeleccionado,
-              ]}
+              style={[styles.rolTexto, rol === r.value && styles.rolTextoSeleccionado]}
             >
               {r.label}
             </Text>

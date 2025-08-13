@@ -1,475 +1,439 @@
-import React, { useState, useEffect } from 'react';
+// app/(superadmin)/cotizaciones.tsx
+import { useEffect, useMemo, useState } from 'react'
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
   Alert,
-  ActivityIndicator,
+  Linking,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  SafeAreaView,
+  Platform,
+  StatusBar,
   RefreshControl,
-} from 'react-native';
-import { useAuth } from '../../hooks/useAuth';
-import { useCotizaciones } from '../../hooks/useCotizaciones';
-import { Cotizacion } from '../../types';
-import { Picker } from '@react-native-picker/picker';
+} from 'react-native'
+import { supabase } from '@/constants/supabase'
 
-const CotizacionesSuperadmin: React.FC = () => {
-  const [refreshing, setRefreshing] = useState(false);
-  const { user } = useAuth();
-  const { cotizaciones, loading, error, fetchCotizaciones, actualizarEstado } = useCotizaciones();
+type Estado = 'cotizado' | 'aprobado' | 'cerrado' | 'facturado' | 'desestimado'
 
-  const [filters, setFilters] = useState({
-    fm_id: '',
-    cliente: '',
-    fecha_inicio: '',
-    fecha_fin: ''
-  });
+type Usuario = {
+  id: string
+  nombre: string | null
+  apellido: string | null
+  email: string | null
+}
+
+type Cotizacion = {
+  id: string
+  numero: number
+  cliente: string
+  descripcion: string | null
+  monto: number | null
+  fecha: string | null
+  estado: Estado
+  archivo_path: string | null
+  archivo_mimetype: string | null
+  creado_en: string
+  subida_por: string
+  usuarios?: Usuario | null // join
+}
+
+const ESTADO_COLOR: Record<Estado, { bg: string; border: string; text: string }> = {
+  cotizado:    { bg: '#E0EAFF', border: '#BFDBFE', text: '#1E40AF' },
+  aprobado:    { bg: '#DCFCE7', border: '#BBF7D0', text: '#166534' },
+  cerrado:     { bg: '#F1F5F9', border: '#E2E8F0', text: '#334155' },
+  facturado:   { bg: '#FEF3C7', border: '#FDE68A', text: '#92400E' },
+  desestimado: { bg: '#FEE2E2', border: '#FCA5A5', text: '#991B1B' },
+}
+
+export default function CotizacionesSuperadmin() {
+  const [cargando, setCargando] = useState(false)
+  const [listado, setListado] = useState<Cotizacion[]>([])
+
+  // filtros
+  const [qId, setQId] = useState('')           // N° o UUID
+  const [fmId, setFmId] = useState<string>('') // elegido del selector
+  const [clienteQ, setClienteQ] = useState('')
+  const [estado, setEstado] = useState<Estado | ''>('')
+  const [desde, setDesde] = useState('')
+  const [hasta, setHasta] = useState('')
+
+  // FMs para el "dropdown" simple
+  const [fms, setFms] = useState<Usuario[]>([])
+  const [abrirFM, setAbrirFM] = useState(false)
+
+  const estados: Estado[] = useMemo(
+    () => ['cotizado', 'aprobado', 'cerrado', 'facturado', 'desestimado'],
+    []
+  )
+
+  // Helpers
+  const isUUID = (s: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s.trim())
+
+  const parseNumero = (s: string) => {
+    const raw = s.trim().replace(/^#/, '')
+    const n = parseInt(raw, 10)
+    return Number.isFinite(n) ? n : null
+  }
+
+  const formatMoney = (n: number | null) => {
+    if (n == null) return '—'
+    try {
+      return `$ ${Number(n).toLocaleString('es-AR')}`
+    } catch {
+      // fallback simple
+      return `$ ${n}`
+    }
+  }
+
+  const formatDate = (s: string | null) => {
+    if (!s) return '—'
+    // Si llega en formato raro, intento parsear yyyy-mm-dd
+    const parts = s.split('-')
+    if (parts.length === 3 && parts[0].length === 4) {
+      const [yyyy, mm, dd] = parts
+      const y = Number(yyyy), m = Number(mm), d = Number(dd)
+      if (y > 1900 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+        return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`
+      }
+    }
+    return s // si no, muestro crudo
+  }
 
   useEffect(() => {
-    if (user) {
-      fetchCotizaciones();
+    cargarFMs()
+    cargarListado()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const cargarFMs = async () => {
+    const { data } = await supabase
+      .from('usuarios')
+      .select('id, nombre, apellido, email')
+      .eq('rol', 'fm')
+      .order('apellido', { ascending: true })
+    setFms(data || [])
+  }
+
+  const cargarListado = async () => {
+    setCargando(true)
+
+    let q = supabase
+      .from('cotizaciones')
+      .select(`
+        id, numero, cliente, descripcion, monto, fecha, estado,
+        archivo_path, archivo_mimetype, creado_en, subida_por,
+        usuarios:subida_por ( id, nombre, apellido, email )
+      `)
+      .order('numero', { ascending: false })
+
+    // Filtro por N°/UUID
+    if (qId.trim()) {
+      if (isUUID(qId)) {
+        q = q.eq('id', qId.trim())
+      } else {
+        const n = parseNumero(qId)
+        if (n !== null) q = q.eq('numero', n)
+      }
     }
-  }, [user]);
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    await fetchCotizaciones(filters);
-    setRefreshing(false);
-  };
+    // Otros filtros
+    if (fmId) q = q.eq('subida_por', fmId)
+    if (clienteQ) q = q.ilike('cliente', `%${clienteQ}%`)
+    if (estado) q = q.eq('estado', estado)
+    if (desde) q = q.gte('fecha', desde)
+    if (hasta) q = q.lte('fecha', hasta)
 
-  const handleFilterSubmit = () => {
-    fetchCotizaciones(filters);
-  };
+    const { data, error } = await q
+    if (!error && data) setListado(data as unknown as Cotizacion[])
+    setCargando(false)
+  }
 
-  const handleEstadoChange = async (id: number, nuevoEstado: Cotizacion['estado']) => {
-    try {
-      await actualizarEstado(id, nuevoEstado);
-      Alert.alert('Éxito', 'Estado actualizado correctamente');
-    } catch (err) {
-      Alert.alert('Error', 'No se pudo actualizar el estado');
+  const limpiarFiltros = () => {
+    setQId('')
+    setFmId('')
+    setClienteQ('')
+    setEstado('')
+    setDesde('')
+    setHasta('')
+  }
+
+  const verArchivo = async (row: Cotizacion) => {
+    if (!row.archivo_path) return Alert.alert('Sin archivo', 'No hay archivo para esta cotización')
+    const { data, error } = await supabase.storage.from('cotizaciones').createSignedUrl(row.archivo_path, 3600)
+    if (error || !data?.signedUrl) return Alert.alert('Error', 'No se pudo obtener el archivo')
+    Linking.openURL(data.signedUrl)
+  }
+
+  const actualizarEstado = async (id: string, nuevo: Estado) => {
+    const prev = listado.slice()
+    setListado((x) => x.map((r) => (r.id === id ? { ...r, estado: nuevo } : r)))
+
+    const { error } = await supabase.from('cotizaciones').update({ estado: nuevo }).eq('id', id)
+    if (error) {
+      Alert.alert('Error', 'No se pudo actualizar el estado: ' + error.message)
+      setListado(prev) // rollback visual
     }
-  };
+  }
 
-  const getEstadoColor = (estado: Cotizacion['estado']) => {
-    const colors = {
-      'Cotizado': '#fbbf24',
-      'Aprobado': '#10b981',
-      'Cerrado': '#3b82f6',
-      'Facturado': '#8b5cf6',
-      'Desestimado': '#ef4444'
-    };
-    return colors[estado] || '#6b7280';
-  };
+  const nombreFM = (u?: Usuario | null) =>
+    u ? `${u.apellido ?? ''} ${u.nombre ?? ''}`.trim() || u.email || '—' : '—'
 
-  if (!user) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#3b82f6" />
-      </View>
-    );
+  const abrirSelectorEstado = (row: Cotizacion) => {
+    Alert.alert(
+      'Cambiar estado',
+      `COT-${String(row.numero).padStart(6, '0')}`,
+      estados.map((es) => ({
+        text: es,
+        onPress: () => actualizarEstado(row.id, es),
+      })),
+    )
+  }
+
+  const etiquetaFM = () => {
+    if (!fmId) return 'Todos los FM'
+    const found = fms.find((u) => u.id === fmId)
+    return found ? `${found.apellido ?? ''} ${found.nombre ?? ''}`.trim() || found.email || found.id : fmId
   }
 
   return (
-    <ScrollView 
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      <View style={styles.header}>
-        <Text style={styles.title}>📊 Gestión de Cotizaciones</Text>
-        <Text style={styles.subtitle}>
-          Visualiza y gestiona todas las cotizaciones del sistema
-        </Text>
-      </View>
+    <SafeAreaView style={styles.safe}>
+      <View style={styles.wrap}>
+        <Text style={styles.title}>Gestionar Cotizaciones (Superadmin)</Text>
 
-      {/* Filtros */}
-      <View style={styles.filtersContainer}>
-        <Text style={styles.filtersTitle}>🔍 Filtros de Búsqueda</Text>
-        
-        <Text style={styles.label}>FM ID</Text>
-        <TextInput
-          style={styles.input}
-          value={filters.fm_id}
-          onChangeText={(text) => setFilters(prev => ({ ...prev, fm_id: text }))}
-          placeholder="ID del FM"
-        />
+        {/* Filtros */}
+        <View style={styles.filtros}>
+          <TextInput
+            placeholder="N° o UUID…"
+            value={qId}
+            onChangeText={setQId}
+            style={styles.input}
+            onSubmitEditing={cargarListado}
+            placeholderTextColor="#94a3b8"
+          />
 
-        <Text style={styles.label}>Cliente</Text>
-        <TextInput
-          style={styles.input}
-          value={filters.cliente}
-          onChangeText={(text) => setFilters(prev => ({ ...prev, cliente: text }))}
-          placeholder="Nombre del cliente"
-        />
+          {/* Selector FM "simple" */}
+          <View>
+            <TouchableOpacity style={styles.input} onPress={() => setAbrirFM((x) => !x)}>
+              <Text style={styles.inputText}>{etiquetaFM()}</Text>
+            </TouchableOpacity>
+            {abrirFM && (
+              <View style={styles.fmPicker}>
+                <TouchableOpacity style={styles.fmItem} onPress={() => { setFmId(''); setAbrirFM(false) }}>
+                  <Text>Todos los FM</Text>
+                </TouchableOpacity>
+                <ScrollView style={{ maxHeight: 220 }}>
+                  {fms.map((u) => (
+                    <TouchableOpacity
+                      key={u.id}
+                      style={styles.fmItem}
+                      onPress={() => { setFmId(u.id); setAbrirFM(false) }}
+                    >
+                      <Text>{`${u.apellido ?? ''} ${u.nombre ?? ''}`.trim() || u.email || u.id}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+          </View>
 
-        <Text style={styles.label}>Fecha Inicio</Text>
-        <TextInput
-          style={styles.input}
-          value={filters.fecha_inicio}
-          onChangeText={(text) => setFilters(prev => ({ ...prev, fecha_inicio: text }))}
-          placeholder="YYYY-MM-DD"
-        />
+          <TextInput
+            placeholder="Cliente…"
+            value={clienteQ}
+            onChangeText={setClienteQ}
+            style={styles.input}
+            onSubmitEditing={cargarListado}
+            placeholderTextColor="#94a3b8"
+          />
 
-        <Text style={styles.label}>Fecha Fin</Text>
-        <TextInput
-          style={styles.input}
-          value={filters.fecha_fin}
-          onChangeText={(text) => setFilters(prev => ({ ...prev, fecha_fin: text }))}
-          placeholder="YYYY-MM-DD"
-        />
+          {/* Estado: botón que abre Alert con opciones */}
+          <TouchableOpacity
+            style={styles.input}
+            onPress={() =>
+              Alert.alert(
+                'Estado',
+                'Filtrar por estado',
+                [{ text: 'Todos', onPress: () => setEstado('') }].concat(
+                  estados.map((es) => ({ text: es, onPress: () => setEstado(es) }))
+                )
+              )
+            }
+          >
+            <Text style={styles.inputText}>{estado || 'Todos los estados'}</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity style={styles.filterButton} onPress={handleFilterSubmit}>
-          <Text style={styles.filterButtonText}>🔍 Filtrar</Text>
-        </TouchableOpacity>
-      </View>
+          <TextInput
+            placeholder="Desde (YYYY-MM-DD)"
+            value={desde}
+            onChangeText={setDesde}
+            style={styles.input}
+            placeholderTextColor="#94a3b8"
+          />
+          <TextInput
+            placeholder="Hasta (YYYY-MM-DD)"
+            value={hasta}
+            onChangeText={setHasta}
+            style={styles.input}
+            placeholderTextColor="#94a3b8"
+          />
 
-      {error && (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
+          <View style={styles.filaBtns}>
+            <TouchableOpacity onPress={cargarListado} disabled={cargando} style={[styles.btn, styles.btnPrimario, cargando && { opacity: 0.7 }]}>
+              <Text style={[styles.btnText, { color: '#fff' }]}>{cargando ? 'Cargando…' : 'Aplicar filtros'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={limpiarFiltros} style={[styles.btn, styles.btnSecundario]}>
+              <Text style={styles.btnText}>Limpiar</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      )}
 
-      <View style={styles.listContainer}>
-        <Text style={styles.listTitle}>📋 Cotizaciones ({cotizaciones.length})</Text>
-        
-        {loading ? (
-          <View style={styles.centerContainer}>
-            <ActivityIndicator size="large" color="#3b82f6" />
-          </View>
-        ) : cotizaciones.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>📋</Text>
-            <Text style={styles.emptyText}>No hay cotizaciones para mostrar</Text>
-          </View>
-        ) : (
-          cotizaciones.map((cotizacion) => (
-            <View key={cotizacion.id} style={styles.cotizacionCard}>
-              <View style={styles.cotizacionHeader}>
-                <Text style={styles.cotizacionNumber}>#{cotizacion.id}</Text>
-                <View style={[styles.estadoBadge, { backgroundColor: getEstadoColor(cotizacion.estado) }]}>
-                  <Text style={styles.estadoText}>{cotizacion.estado}</Text>
-                </View>
-              </View>
-              
-              <Text style={styles.clienteText}>{cotizacion.cliente}</Text>
-              <Text style={styles.descripcionText}>{cotizacion.descripcion}</Text>
-              
-              <View style={styles.cotizacionFooter}>
-                <Text style={styles.montoText}>${cotizacion.monto.toFixed(2)}</Text>
-                <Text style={styles.fechaText}>
-                  {new Date(cotizacion.fecha).toLocaleDateString()}
-                </Text>
-              </View>
-
-              <View style={styles.fmInfo}>
-                <Text style={styles.fmLabel}>FM: {cotizacion.subida_por}</Text>
-              </View>
-
-              <View style={styles.estadoSelector}>
-                <Text style={styles.estadoLabel}>Cambiar Estado:</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={cotizacion.estado}
-                    onValueChange={(value) => handleEstadoChange(cotizacion.id, value)}
-                    style={styles.picker}
-                    itemStyle={styles.pickerItem}
+        {/* Lista */}
+        <ScrollView
+          style={{ flex: 1 }}
+          refreshControl={<RefreshControl refreshing={cargando} onRefresh={cargarListado} />}
+          contentContainerStyle={{ paddingBottom: 120 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          {!listado.length && (
+            <Text style={styles.empty}>No hay resultados</Text>
+          )}
+          {listado.map((r) => {
+            const color = ESTADO_COLOR[r.estado]
+            return (
+              <View key={r.id} style={styles.card}>
+                <View style={styles.rowBetween}>
+                  <Text style={styles.num}>#{String(r.numero).padStart(6, '0')}</Text>
+                  <TouchableOpacity
+                    onPress={() => abrirSelectorEstado(r)}
+                    style={[
+                      styles.estadoChip,
+                      { backgroundColor: color.bg, borderColor: color.border },
+                    ]}
                   >
-                    <Picker.Item label="📋 Cotizado" value="Cotizado" />
-                    <Picker.Item label="✅ Aprobado" value="Aprobado" />
-                    <Picker.Item label="🔒 Cerrado" value="Cerrado" />
-                    <Picker.Item label="💰 Facturado" value="Facturado" />
-                    <Picker.Item label="❌ Desestimado" value="Desestimado" />
-                  </Picker>
+                    <Text style={[styles.estadoText, { color: color.text }]}>{r.estado}</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.cliente}>{r.cliente}</Text>
+                <Text style={styles.desc}>{r.descripcion ?? '—'}</Text>
+
+                <View style={styles.grid2}>
+                  <Text style={styles.meta}>
+                    Monto: <Text style={styles.bold}>{formatMoney(r.monto)}</Text>
+                  </Text>
+                  <Text style={styles.meta}>
+                    Fecha: <Text style={styles.bold}>{formatDate(r.fecha)}</Text>
+                  </Text>
+                </View>
+
+                <Text style={styles.meta}>
+                  Subida por: <Text style={styles.bold}>{nombreFM(r.usuarios)}</Text>
+                </Text>
+
+                <View style={styles.actions}>
+                  <TouchableOpacity
+                    style={[styles.linkBtn, !r.archivo_path && { opacity: 0.5 }]}
+                    onPress={() => verArchivo(r)}
+                    disabled={!r.archivo_path}
+                  >
+                    <Text style={styles.linkBtnText}>{r.archivo_path ? 'Ver/Descargar' : 'Sin archivo'}</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
-            </View>
-          ))
-        )}
+            )
+          })}
+        </ScrollView>
       </View>
-    </ScrollView>
-  );
-};
+    </SafeAreaView>
+  )
+}
 
 const styles = StyleSheet.create({
-  container: {
+  // Safe area + “bajar” el inicio del contenido
+  safe: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: '#f1f5f9',
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 8 : 8,
   },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-  },
-  header: {
-    padding: 24,
-    backgroundColor: 'white',
-    marginBottom: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#6b7280',
-  },
-  filtersContainer: {
-    backgroundColor: 'white',
-    margin: 20,
-    padding: 24,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: '#f3f4f6',
-  },
-  filtersTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    color: '#1f2937',
-    textAlign: 'center',
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-    color: '#374151',
-  },
-  input: {
-    borderWidth: 2,
-    borderColor: '#e5e7eb',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    fontSize: 16,
-    backgroundColor: 'white',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
-  },
-  filterButton: {
-    backgroundColor: '#3b82f6',
-    padding: 18,
-    borderRadius: 12,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 6,
-  },
-  filterButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  errorContainer: {
-    backgroundColor: '#fee2e2',
-    borderColor: '#fecaca',
-    borderWidth: 2,
-    borderRadius: 12,
-    padding: 20,
-    margin: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  errorText: {
-    color: '#dc2626',
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  listContainer: {
-    padding: 20,
-  },
-  listTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    color: '#1f2937',
-    textAlign: 'center',
-    backgroundColor: 'white',
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    padding: 60,
-    backgroundColor: 'white',
-    margin: 20,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  emptyText: {
-    color: '#6b7280',
-    fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  cotizacionCard: {
-    backgroundColor: 'white',
-    padding: 20,
-    borderRadius: 16,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: '#f3f4f6',
-  },
-  cotizacionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  cotizacionNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    backgroundColor: '#f3f4f6',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  estadoBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 3,
-  },
-  estadoText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '700',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 1,
-  },
-  clienteText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  descripcionText: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 12,
-    lineHeight: 20,
-  },
-  cotizacionFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
-  },
-  montoText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#059669',
-    backgroundColor: '#ecfdf5',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  fechaText: {
-    fontSize: 14,
-    color: '#6b7280',
-    backgroundColor: '#f9fafb',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  fmInfo: {
-    marginBottom: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
-  },
-  fmLabel: {
-    fontSize: 14,
-    color: '#6b7280',
-    fontStyle: 'italic',
-    backgroundColor: '#f9fafb',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  estadoSelector: {
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-    paddingTop: 16,
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-    padding: 12,
-  },
-  estadoLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  pickerContainer: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    overflow: 'hidden',
-  },
-  picker: {
-    marginTop: 0,
-    backgroundColor: 'transparent',
-  },
-  pickerItem: {
-    fontSize: 16,
-    color: '#374151',
-  },
-});
 
-export default CotizacionesSuperadmin;
+  wrap: { flex: 1, paddingHorizontal: 16, backgroundColor: '#f1f5f9' },
+  title: { fontSize: 18, fontWeight: '700', color: '#0f172a', marginBottom: 12 },
+
+  // Filtros
+  filtros: { gap: 8, marginBottom: 12 },
+  input: {
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: '#fff',
+  },
+  inputText: { color: '#0f172a' },
+
+  fmPicker: {
+    borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 10, backgroundColor: '#fff', marginTop: 6,
+  },
+  fmItem: {
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e2e8f0',
+  },
+
+  filaBtns: { flexDirection: 'row', gap: 10 },
+  btn: {
+    flex: 1,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btnPrimario: { backgroundColor: '#2563EB' },
+  btnSecundario: {
+    backgroundColor: '#e2e8f0',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+  },
+  btnText: { fontWeight: '700', color: '#0f172a' },
+
+  empty: { textAlign: 'center', color: '#64748b', paddingVertical: 16 },
+
+  // Cards
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 14,
+    marginBottom: 12,
+  },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  num: { fontWeight: '800', color: '#0f172a' },
+
+  estadoChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  estadoText: { fontWeight: '700' },
+
+  cliente: { fontWeight: '700', color: '#0f172a', marginBottom: 2, fontSize: 16 },
+  desc: { color: '#334155', marginBottom: 8 },
+  grid2: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
+  meta: { color: '#475569', marginBottom: 2 },
+  bold: { fontWeight: '700', color: '#0f172a' },
+
+  actions: { marginTop: 10, flexDirection: 'row', gap: 8 },
+  linkBtn: {
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  linkBtnText: { fontWeight: '700', color: '#0f172a' },
+})

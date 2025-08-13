@@ -1,513 +1,421 @@
-import React, { useState, useEffect } from 'react';
+// app/(fm)/cotizaciones.tsx
+import { Buffer } from 'buffer'
+import * as DocumentPicker from 'expo-document-picker'
+import * as FileSystem from 'expo-file-system'
+import { useEffect, useMemo, useState } from 'react'
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
   Alert,
-  ActivityIndicator,
-  RefreshControl,
-} from 'react-native';
-import { useAuth } from '../../hooks/useAuth';
-import { useCotizaciones } from '../../hooks/useCotizaciones';
-import { Cotizacion } from '../../types';
-import { Picker } from '@react-native-picker/picker';
-import { router } from 'expo-router';
+  Linking,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native'
+import { supabase } from '@/constants/supabase'
 
-const CotizacionesFM: React.FC = () => {
-  const [showForm, setShowForm] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const { user } = useAuth();
-  const { cotizaciones, loading, error, fetchCotizaciones, crearCotizacion, actualizarEstado } = useCotizaciones();
+global.Buffer = Buffer
 
-  const [formData, setFormData] = useState({
-    cliente: '',
-    descripcion: '',
-    monto: '',
-    fecha: new Date().toISOString().split('T')[0],
-    estado: 'Cotizado' as Cotizacion['estado']
-  });
+type Estado = 'cotizado' | 'aprobado' | 'cerrado' | 'facturado' | 'desestimado'
+
+type Cotizacion = {
+  id: string
+  numero: number
+  cliente: string
+  descripcion: string | null
+  monto: number | null
+  fecha: string | null
+  estado: Estado
+  archivo_path: string | null
+  archivo_mimetype: string | null
+  creado_en: string
+}
+
+const pad6 = (n: number) => String(n).padStart(6, '0')
+
+export default function CotizacionesFM() {
+  const [meId, setMeId] = useState<string | null>(null)
+  const [cargando, setCargando] = useState(false)
+  const [listado, setListado] = useState<Cotizacion[]>([])
+
+  // Filtros
+  const [qId, setQId] = useState('')          // N° o UUID
+  const [qCliente, setQCliente] = useState('')
+  const [desde, setDesde] = useState('')
+  const [hasta, setHasta] = useState('')
+
+  // Form
+  const [cliente, setCliente] = useState('')
+  const [descripcion, setDescripcion] = useState('')
+  const [monto, setMonto] = useState<string>('')
+  const [fecha, setFecha] = useState<string>('')
+  const [estado, setEstado] = useState<Estado>('cotizado')
+  const [archivo, setArchivo] = useState<{ uri: string, name: string, mimeType: string } | null>(null)
+  const [subiendo, setSubiendo] = useState(false)
+
+  const estados: Estado[] = useMemo(
+    () => ['cotizado', 'aprobado', 'cerrado', 'facturado', 'desestimado'],
+    []
+  )
+
+  // Helpers filtro ID/N°
+  const isUUID = (s: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s.trim())
+  const parseNumero = (s: string) => {
+    const raw = s.trim().replace(/^#/, '')
+    const n = parseInt(raw, 10)
+    return Number.isFinite(n) ? n : null
+  }
 
   useEffect(() => {
-    if (user) {
-      fetchCotizaciones(undefined, user.id);
-    }
-  }, [user]);
+    ;(async () => {
+      const { data } = await supabase.auth.getUser()
+      const uid = data?.user?.id ?? null
+      setMeId(uid)
+      await cargarListado()
+    })()
+  }, [])
 
-  const onRefresh = async () => {
-    setRefreshing(true);
-    if (user) {
-      await fetchCotizaciones(undefined, user.id);
-    }
-    setRefreshing(false);
-  };
+  const cargarListado = async () => {
+    setCargando(true)
+    let q = supabase.from('cotizaciones').select('*').order('numero', { ascending: false })
 
-  const handleSubmit = async () => {
-    if (!formData.cliente || !formData.descripcion || !formData.monto) {
-      Alert.alert('Error', 'Por favor completa todos los campos requeridos');
-      return;
+    // Filtro por N°/UUID
+    if (qId.trim()) {
+      if (isUUID(qId)) {
+        q = q.eq('id', qId.trim())
+      } else {
+        const n = parseNumero(qId)
+        if (n !== null) q = q.eq('numero', n)
+      }
     }
 
+    // Resto de filtros
+    if (qCliente) q = q.ilike('cliente', `%${qCliente}%`)
+    if (desde) q = q.gte('fecha', desde)
+    if (hasta) q = q.lte('fecha', hasta)
+
+    const { data, error } = await q
+    if (error) {
+      console.error(error)
+    } else if (data) {
+      setListado(data as Cotizacion[])
+    }
+    setCargando(false)
+  }
+
+  const limpiarForm = () => {
+    setCliente('')
+    setDescripcion('')
+    setMonto('')
+    setFecha('')
+    setEstado('cotizado')
+    setArchivo(null)
+  }
+
+  const elegirArchivo = async () => {
+    const res = await DocumentPicker.getDocumentAsync({
+      type: ['application/pdf', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+      multiple: false,
+      copyToCacheDirectory: true,
+    })
+    if (res.canceled) return
+    const f = res.assets?.[0]
+    if (!f) return
+    setArchivo({ uri: f.uri, name: f.name || 'archivo.pdf', mimeType: f.mimeType || 'application/octet-stream' })
+  }
+
+  // Subir a Supabase Storage vía PUT (base64)
+  const uploadToStorage = async (bucket: string, path: string, fileUri: string, mime: string) => {
+    const base64 = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 })
+    const bin = Buffer.from(base64, 'base64')
+    const { data: sessionData, error: sessionErr } = await supabase.auth.getSession()
+    if (sessionErr || !sessionData?.session) throw new Error('Sesión inválida')
+
+    // @ts-ignore
+    const SUPABASE_URL = (supabase as any).supabaseUrl || process.env.EXPO_PUBLIC_SUPABASE_URL
+    // @ts-ignore
+    const SUPABASE_ANON_KEY = (supabase as any).supabaseKey || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
+
+    const url = `${SUPABASE_URL}/storage/v1/object/${bucket}/${encodeURI(path)}`
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': mime || 'application/octet-stream',
+        'Authorization': `Bearer ${sessionData.session.access_token}`,
+        'apikey': SUPABASE_ANON_KEY,
+        'x-upsert': 'true',
+      },
+      body: bin as any,
+    })
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '')
+      throw new Error(`Upload error: ${res.status} ${txt}`)
+    }
+  }
+
+  const subirCotizacion = async () => {
     try {
-      await crearCotizacion({
-        ...formData,
-        monto: parseFloat(formData.monto),
-        subida_por: user!.id
-      });
-      
-      // Limpiar formulario
-      setFormData({
-        cliente: '',
-        descripcion: '',
-        monto: '',
-        fecha: new Date().toISOString().split('T')[0],
-        estado: 'Cotizado'
-      });
-      
-      setShowForm(false);
-      Alert.alert('Éxito', 'Cotización creada correctamente');
-    } catch (err) {
-      Alert.alert('Error', 'No se pudo crear la cotización');
+      if (!meId) return Alert.alert('Sesión', 'No hay sesión')
+      if (!cliente.trim()) return Alert.alert('Validación', 'Ingresá el cliente')
+      if (!archivo) return Alert.alert('Validación', 'Adjuntá el archivo (PDF/Excel)')
+
+      setSubiendo(true)
+
+      // 1) Insert preliminar para obtener numero
+      const { data: inserted, error: insertErr } = await supabase
+        .from('cotizaciones')
+        .insert({
+          cliente: cliente.trim(),
+          descripcion: descripcion.trim() || null,
+          monto: monto ? Number(monto) : null,
+          fecha: fecha || null,
+          estado,
+          subida_por: meId,
+          archivo_path: null,
+          archivo_mimetype: archivo.mimeType || null,
+        })
+        .select('id, numero')
+        .single()
+
+      if (insertErr || !inserted) throw new Error(insertErr?.message || 'Error al crear la cotización')
+
+      // 2) Subir a storage usando el numero
+      const safeCliente = cliente.toLowerCase().replace(/[^a-z0-9-_]+/g, '-')
+      const ext = (archivo.name.split('.').pop() || (archivo.mimeType?.includes('pdf') ? 'pdf' : 'dat')).toLowerCase()
+      const fileName = `${pad6(inserted.numero)}_${safeCliente}.${ext}`
+      const path = `${meId}/${fileName}`
+
+      await uploadToStorage('cotizaciones', path, archivo.uri, archivo.mimeType)
+
+      // 3) Update con archivo_path (RLS update_owner)
+      const { error: updErr } = await supabase.from('cotizaciones').update({ archivo_path: path }).eq('id', inserted.id)
+      if (updErr) throw new Error('Subido, pero no se guardó el path: ' + updErr.message)
+
+      Alert.alert('OK', `Cotización COT-${pad6(inserted.numero)} creada`)
+      limpiarForm()
+      cargarListado()
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'No se pudo subir la cotización')
+    } finally {
+      setSubiendo(false)
     }
-  };
+  }
 
-  const handleEstadoChange = async (id: number, nuevoEstado: Cotizacion['estado']) => {
-    try {
-      await actualizarEstado(id, nuevoEstado);
-      Alert.alert('Éxito', 'Estado actualizado correctamente');
-    } catch (err) {
-      Alert.alert('Error', 'No se pudo actualizar el estado');
-    }
-  };
+  const verArchivo = async (row: Cotizacion) => {
+    if (!row.archivo_path) return Alert.alert('Sin archivo', 'No hay archivo para esta cotización')
+    const { data, error } = await supabase.storage.from('cotizaciones').createSignedUrl(row.archivo_path, 3600)
+    if (error || !data?.signedUrl) return Alert.alert('Error', 'No se pudo obtener el archivo')
+    Linking.openURL(data.signedUrl)
+  }
 
-  const getEstadoColor = (estado: Cotizacion['estado']) => {
-    const colors = {
-      'Cotizado': '#fbbf24',
-      'Aprobado': '#10b981',
-      'Cerrado': '#3b82f6',
-      'Facturado': '#8b5cf6',
-      'Desestimado': '#ef4444'
-    };
-    return colors[estado] || '#6b7280';
-  };
-
-  if (!user) {
-    return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#3b82f6" />
-      </View>
-    );
+  const actualizarEstado = async (row: Cotizacion) => {
+    Alert.alert(
+      'Cambiar estado',
+      `COT-${pad6(row.numero)}`,
+      estados.map((es) => ({
+        text: es,
+        onPress: async () => {
+          const prev = listado.slice()
+          try {
+            setListado((xs) => xs.map((r) => (r.id === row.id ? { ...r, estado: es } : r)))
+            const { error } = await supabase.from('cotizaciones').update({ estado: es }).eq('id', row.id)
+            if (error) throw error
+          } catch (e: any) {
+            setListado(prev)
+            Alert.alert('Error', 'No se pudo actualizar el estado: ' + (e?.message || ''))
+          }
+        },
+      })),
+    )
   }
 
   return (
-    <ScrollView 
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }
-    >
-      <View style={styles.header}>
-        <Text style={styles.title}>📊 Gestión de Cotizaciones</Text>
-        <TouchableOpacity
-          style={styles.button}
-          onPress={() => setShowForm(!showForm)}
-        >
-          <Text style={styles.buttonText}>
-            {showForm ? '❌ Ocultar' : '📝 Nueva Cotización'}
-          </Text>
+    <View style={styles.wrap}>
+      <Text style={styles.title}>Cotizaciones (FM)</Text>
+
+      {/* Form alta */}
+      <View style={styles.form}>
+        <Text style={styles.label}>Cliente *</Text>
+        <TextInput
+          value={cliente}
+          onChangeText={setCliente}
+          placeholder="Cliente"
+          style={styles.input}
+          placeholderTextColor="#6b7280"
+          autoCapitalize="sentences"
+        />
+
+        <Text style={styles.label}>Descripción</Text>
+        <TextInput
+          value={descripcion}
+          onChangeText={setDescripcion}
+          placeholder="Descripción"
+          style={styles.input}
+          placeholderTextColor="#6b7280"
+          autoCapitalize="sentences"
+        />
+
+        <View style={styles.row3}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>Monto</Text>
+            <TextInput
+              value={monto}
+              onChangeText={setMonto}
+              placeholder="0"
+              style={styles.input}
+              placeholderTextColor="#6b7280"
+              keyboardType="decimal-pad"
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>Fecha</Text>
+            <TextInput
+              value={fecha}
+              onChangeText={setFecha}
+              placeholder="YYYY-MM-DD"
+              style={styles.input}
+              placeholderTextColor="#6b7280"
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>Estado</Text>
+            <TouchableOpacity
+              style={styles.input}
+              onPress={() =>
+                Alert.alert(
+                  'Estado',
+                  'Seleccioná un estado',
+                  estados.map((es) => ({ text: es, onPress: () => setEstado(es) }))
+                )
+              }
+            >
+              <Text style={styles.inputText}>{estado}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <Text style={styles.label}>Archivo (PDF/Excel) *</Text>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity style={styles.btnGhost} onPress={elegirArchivo}>
+            <Text style={styles.btnGhostText}>{archivo ? archivo.name : 'Elegir archivo'}</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+          <TouchableOpacity style={styles.btnPrimary} disabled={subiendo} onPress={subirCotizacion}>
+            <Text style={styles.btnPrimaryText}>{subiendo ? 'Subiendo…' : 'Guardar cotización'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.btn} disabled={subiendo} onPress={limpiarForm}>
+            <Text style={styles.btnText}>Limpiar</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Filtros */}
+      <View style={styles.filtros}>
+        <TextInput
+          placeholder="Buscar por N° o UUID…"
+          value={qId}
+          onChangeText={setQId}
+          style={styles.input}
+          onSubmitEditing={cargarListado}
+          placeholderTextColor="#6b7280"
+        />
+        <TextInput
+          placeholder="Buscar por cliente…"
+          value={qCliente}
+          onChangeText={setQCliente}
+          style={styles.input}
+          onSubmitEditing={cargarListado}
+          placeholderTextColor="#6b7280"
+        />
+        <TextInput
+          placeholder="Desde (YYYY-MM-DD)"
+          value={desde}
+          onChangeText={setDesde}
+          style={styles.input}
+          placeholderTextColor="#6b7280"
+        />
+        <TextInput
+          placeholder="Hasta (YYYY-MM-DD)"
+          value={hasta}
+          onChangeText={setHasta}
+          style={styles.input}
+          placeholderTextColor="#6b7280"
+        />
+        <TouchableOpacity onPress={cargarListado} disabled={cargando} style={styles.btn}>
+          <Text style={styles.btnText}>{cargando ? 'Cargando…' : 'Aplicar filtros'}</Text>
         </TouchableOpacity>
       </View>
 
-      {showForm && (
-        <View style={styles.formContainer}>
-          <Text style={styles.formTitle}>📝 Nueva Cotización</Text>
-          
-          <Text style={styles.label}>Cliente *</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.cliente}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, cliente: text }))}
-            placeholder="Nombre del cliente"
-          />
-
-          <Text style={styles.label}>Descripción *</Text>
-          <TextInput
-            style={[styles.input, styles.textArea]}
-            value={formData.descripcion}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, descripcion: text }))}
-            placeholder="Descripción del trabajo o servicio"
-            multiline
-            numberOfLines={3}
-          />
-
-          <Text style={styles.label}>Monto *</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.monto}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, monto: text }))}
-            placeholder="0.00"
-            keyboardType="numeric"
-          />
-
-          <Text style={styles.label}>Fecha *</Text>
-          <TextInput
-            style={styles.input}
-            value={formData.fecha}
-            onChangeText={(text) => setFormData(prev => ({ ...prev, fecha: text }))}
-            placeholder="YYYY-MM-DD"
-          />
-
-          <TouchableOpacity style={styles.submitButton} onPress={handleSubmit}>
-            <Text style={styles.submitButtonText}>✅ Crear Cotización</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {error && (
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      )}
-
-      <View style={styles.listContainer}>
-        <Text style={styles.listTitle}>📋 Mis Cotizaciones ({cotizaciones.length})</Text>
-        
-        {loading ? (
-          <View style={styles.centerContainer}>
-            <ActivityIndicator size="large" color="#3b82f6" />
-          </View>
-        ) : cotizaciones.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>📋</Text>
-            <Text style={styles.emptyText}>No hay cotizaciones para mostrar</Text>
-          </View>
-        ) : (
-          cotizaciones.map((cotizacion) => (
-            <View key={cotizacion.id} style={styles.cotizacionCard}>
-              <View style={styles.cotizacionHeader}>
-                <Text style={styles.cotizacionNumber}>#{cotizacion.id}</Text>
-                <View style={[styles.estadoBadge, { backgroundColor: getEstadoColor(cotizacion.estado) }]}>
-                  <Text style={styles.estadoText}>{cotizacion.estado}</Text>
-                </View>
-              </View>
-              
-              <Text style={styles.clienteText}>{cotizacion.cliente}</Text>
-              <Text style={styles.descripcionText}>{cotizacion.descripcion}</Text>
-              
-              <View style={styles.cotizacionFooter}>
-                <Text style={styles.montoText}>${cotizacion.monto.toFixed(2)}</Text>
-                <Text style={styles.fechaText}>
-                  {new Date(cotizacion.fecha).toLocaleDateString()}
-                </Text>
-              </View>
-
-              <View style={styles.estadoSelector}>
-                <Text style={styles.estadoLabel}>Cambiar Estado:</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={cotizacion.estado}
-                    onValueChange={(value) => handleEstadoChange(cotizacion.id, value)}
-                    style={styles.picker}
-                    itemStyle={styles.pickerItem}
-                  >
-                    <Picker.Item label="📋 Cotizado" value="Cotizado" />
-                    <Picker.Item label="✅ Aprobado" value="Aprobado" />
-                    <Picker.Item label="🔒 Cerrado" value="Cerrado" />
-                    <Picker.Item label="💰 Facturado" value="Facturado" />
-                    <Picker.Item label="❌ Desestimado" value="Desestimado" />
-                  </Picker>
-                </View>
-              </View>
+      {/* Lista */}
+      <ScrollView style={{ flex: 1 }}>
+        {!listado.length && <Text style={styles.empty}>No hay cotizaciones</Text>}
+        {listado.map((row) => (
+          <View key={row.id} style={styles.card}>
+            <View style={styles.rowBetween}>
+              <Text style={styles.num}>#{pad6(row.numero)}</Text>
+              <TouchableOpacity onPress={() => actualizarEstado(row)} style={styles.estadoChip}>
+                <Text style={styles.estadoText}>{row.estado}</Text>
+              </TouchableOpacity>
             </View>
-          ))
-        )}
-      </View>
-    </ScrollView>
-  );
-};
+            <Text style={styles.cliente}>{row.cliente}</Text>
+            <Text style={styles.desc}>{row.descripcion ?? '-'}</Text>
+            <View style={styles.grid2}>
+              <Text style={styles.meta}>Monto: <Text style={styles.bold}>{row.monto ?? '-'}</Text></Text>
+              <Text style={styles.meta}>Fecha: <Text style={styles.bold}>{row.fecha ?? '-'}</Text></Text>
+            </View>
+
+            <View style={styles.actions}>
+              <TouchableOpacity
+                style={[styles.linkBtn, !row.archivo_path && { opacity: 0.5 }]}
+                onPress={() => verArchivo(row)}
+                disabled={!row.archivo_path}
+              >
+                <Text style={styles.linkBtnText}>{row.archivo_path ? 'Ver/Descargar' : 'Sin archivo'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  )
+}
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f3f4f6',
-  },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: 'white',
-    marginBottom: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#1f2937',
-  },
-  button: {
-    backgroundColor: '#3b82f6',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
-  },
-  buttonText: {
-    color: 'white',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  formContainer: {
-    backgroundColor: 'white',
-    margin: 20,
-    padding: 24,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: '#f3f4f6',
-  },
-  formTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 24,
-    color: '#1f2937',
-    textAlign: 'center',
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 8,
-    color: '#374151',
-  },
+  wrap: { flex: 1, padding: 16, backgroundColor: '#f1f5f9' },
+  title: { fontSize: 18, fontWeight: '700', color: '#0f172a', marginBottom: 12 },
+  form: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 12, backgroundColor: '#fff', marginBottom: 12 },
+  filtros: { gap: 8, marginBottom: 12 },
+  label: { color: '#475569', fontWeight: '700', marginBottom: 4 },
   input: {
-    borderWidth: 2,
-    borderColor: '#e5e7eb',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
-    fontSize: 16,
-    backgroundColor: 'white',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10,
+    backgroundColor: '#fff', color: '#0f172a',
   },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  submitButton: {
-    backgroundColor: '#10b981',
-    padding: 18,
-    borderRadius: 12,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    elevation: 6,
-  },
-  submitButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  errorContainer: {
-    backgroundColor: '#fee2e2',
-    borderColor: '#fecaca',
-    borderWidth: 2,
-    borderRadius: 12,
-    padding: 20,
-    margin: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  errorText: {
-    color: '#dc2626',
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  listContainer: {
-    padding: 20,
-  },
-  listTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    color: '#1f2937',
-    textAlign: 'center',
-    backgroundColor: 'white',
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    padding: 60,
-    backgroundColor: 'white',
-    margin: 20,
-    borderRadius: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  emptyText: {
-    color: '#6b7280',
-    fontSize: 18,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  emptyIcon: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  cotizacionCard: {
-    backgroundColor: 'white',
-    padding: 20,
-    borderRadius: 16,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 5,
-    borderWidth: 1,
-    borderColor: '#f3f4f6',
-  },
-  cotizacionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
-  cotizacionNumber: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1f2937',
-    backgroundColor: '#f3f4f6',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  estadoBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    elevation: 3,
-  },
-  estadoText: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: '700',
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 1,
-  },
-  clienteText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  descripcionText: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 12,
-    lineHeight: 20,
-  },
-  cotizacionFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
-  },
-  montoText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#059669',
-    backgroundColor: '#ecfdf5',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  fechaText: {
-    fontSize: 14,
-    color: '#6b7280',
-    backgroundColor: '#f9fafb',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  estadoSelector: {
-    borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
-    paddingTop: 16,
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-    padding: 12,
-  },
-  estadoLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 8,
-  },
-  pickerContainer: {
-    backgroundColor: 'white',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    overflow: 'hidden',
-  },
-  picker: {
-    marginTop: 0,
-    backgroundColor: 'transparent',
-  },
-  pickerItem: {
-    fontSize: 16,
-    color: '#374151',
-  },
-});
+  // color del texto "dentro" de los contenedores tipo select simulados
+  inputText: { color: '#0f172a' },
 
-export default CotizacionesFM;
+  row3: { flexDirection: 'row', gap: 12 },
+  btnPrimary: { backgroundColor: '#0ea5e9', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12 },
+  btnPrimaryText: { color: '#fff', fontWeight: '700' },
+  btn: { backgroundColor: '#e2e8f0', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, alignItems: 'center' },
+  btnText: { fontWeight: '700', color: '#0f172a' },
+  btnGhost: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
+  btnGhostText: { fontWeight: '700', color: '#0f172a' },
+  empty: { textAlign: 'center', color: '#64748b', paddingVertical: 16 },
+  card: { backgroundColor: '#fff', borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0', padding: 12, marginBottom: 10 },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  num: { fontWeight: '800', color: '#0f172a' },
+  estadoChip: { backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  estadoText: { fontWeight: '700', color: '#0f172a' },
+  cliente: { fontWeight: '700', color: '#0f172a', marginBottom: 2 },
+  desc: { color: '#334155', marginBottom: 6 },
+  grid2: { flexDirection: 'row', justifyContent: 'space-between' },
+  meta: { color: '#475569', marginBottom: 2 },
+  bold: { fontWeight: '700', color: '#0f172a' },
+  actions: { marginTop: 8, flexDirection: 'row', gap: 8 },
+  linkBtn: { backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 },
+  linkBtnText: { fontWeight: '700', color: '#0f172a' },
+})
