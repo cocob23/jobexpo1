@@ -45,15 +45,22 @@ export default function PerfilTecnico() {
   const [documentos, setDocumentos] = useState<any>(null)
   const [refreshing, setRefreshing] = useState(false)
 
+  // ⬇️ Selector de período dinámico
+  const [periodo, setPeriodo] = useState<string>(() => dayjs().format('YYYY-MM'))
+
   const [planillasMes, setPlanillasMes] = useState<Record<'gestion' | 'gastos', Planilla | null>>({
     gestion: null,
     gastos: null,
   })
-  const periodoActual = dayjs().format('YYYY-MM')
 
   useEffect(() => {
     if (id) fetchDatos()
   }, [id])
+
+  // Re-cargar planillas cuando cambie el período
+  useEffect(() => {
+    if (id) cargarPlanillasMes(String(id), periodo)
+  }, [id, periodo])
 
   const fetchDatos = async () => {
     try {
@@ -108,20 +115,19 @@ export default function PerfilTecnico() {
         .maybeSingle()
       if (!errorDoc) setDocumentos(doc || null)
 
-      // Planillas del mes actual
-      await cargarPlanillasMes(String(id))
+      // ⚠️ Planillas ahora se cargan por useEffect cuando cambia "periodo"
     } catch (e) {
       console.log('fetchDatos exception:', e)
       Alert.alert('Error', 'Ocurrió un problema cargando el perfil.')
     }
   }
 
-  const cargarPlanillasMes = async (tecnicoId: string) => {
+  const cargarPlanillasMes = async (tecnicoId: string, per: string) => {
     const { data, error } = await supabase
       .from('planillas_ext')
       .select('*')
       .eq('usuario_id', tecnicoId)
-      .eq('periodo', periodoActual)
+      .eq('periodo', per)
 
     if (error) {
       console.log('Error cargarPlanillasMes:', error)
@@ -138,6 +144,8 @@ export default function PerfilTecnico() {
   const onRefresh = async () => {
     setRefreshing(true)
     await fetchDatos()
+    // Vuelve a pedir planillas para el período actual
+    if (id) await cargarPlanillasMes(String(id), periodo)
     setRefreshing(false)
   }
 
@@ -163,6 +171,7 @@ export default function PerfilTecnico() {
       const token = sessionData.session?.access_token
       if (!token) throw new Error('no se pudo obtener el token')
 
+      // ⚠️ Ajustá la URL base a tu proyecto si no coincide:
       const uploadRes = await fetch(
         `https://lknfaxkigownvjsijzhb.supabase.co/storage/v1/object/${bucket}/${path}`,
         {
@@ -349,10 +358,39 @@ export default function PerfilTecnico() {
             <Text style={styles.botonTexto}>Eliminar acta de compromiso</Text>
           </TouchableOpacity>
 
-          {/* Planillas */}
+          {/* ---------- Planillas ---------- */}
           <Text style={[styles.subtitulo, { marginTop: 24 }]}>
-            Planillas (Periodo {periodoActual})
+            Planillas (Período {periodo})
           </Text>
+
+          {/* Controles de período */}
+          <View style={styles.periodRow}>
+            <TouchableOpacity
+              style={styles.periodBtn}
+              onPress={() => {
+                const prev = dayjs(`${periodo}-01`).subtract(1, 'month').format('YYYY-MM')
+                setPeriodo(prev)
+              }}
+            >
+              <Text style={styles.periodBtnText}>◀ Mes anterior</Text>
+            </TouchableOpacity>
+
+            <View style={styles.periodBadge}>
+              <Text style={styles.periodBadgeText}>
+                {dayjs(`${periodo}-01`).format('MMMM YYYY')}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={styles.periodBtn}
+              onPress={() => {
+                const next = dayjs(`${periodo}-01`).add(1, 'month').format('YYYY-MM')
+                setPeriodo(next)
+              }}
+            >
+              <Text style={styles.periodBtnText}>Mes siguiente ▶</Text>
+            </TouchableOpacity>
+          </View>
 
           {(['gestion', 'gastos'] as const).map((tipo) => {
             const p = planillasMes[tipo]
@@ -455,5 +493,36 @@ const styles = StyleSheet.create({
   },
   botonMiniDisabled: {
     opacity: 0.5,
+  },
+
+  /* Período */
+  periodRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 8,
+  },
+  periodBtn: {
+    backgroundColor: '#111827',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  periodBtnText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  periodBadge: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#e5e7eb',
+  },
+  periodBadgeText: {
+    color: '#111827',
+    fontWeight: '700',
+    textTransform: 'capitalize',
   },
 })
