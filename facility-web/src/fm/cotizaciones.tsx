@@ -21,11 +21,14 @@ export default function CotizacionesFM() {
   const [meId, setMeId] = useState<string | null>(null)
   const [cargando, setCargando] = useState(false)
   const [listado, setListado] = useState<Cotizacion[]>([])
+
+  // Filtros
+  const [qId, setQId] = useState('')          // N° o UUID
   const [qCliente, setQCliente] = useState('')
   const [desde, setDesde] = useState('')
   const [hasta, setHasta] = useState('')
 
-  // form
+  // Form
   const [cliente, setCliente] = useState('')
   const [descripcion, setDescripcion] = useState('')
   const [monto, setMonto] = useState<string>('')
@@ -34,8 +37,17 @@ export default function CotizacionesFM() {
   const [archivo, setArchivo] = useState<File | null>(null)
   const [subiendo, setSubiendo] = useState(false)
 
+  // Helpers filtro ID/N°
+  const isUUID = (s: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s.trim())
+  const parseNumero = (s: string) => {
+    const raw = s.trim().replace(/^#/, '')
+    const n = parseInt(raw, 10)
+    return Number.isFinite(n) ? n : null
+  }
+
   useEffect(() => {
-    (async () => {
+    ;(async () => {
       const { data } = await supabase.auth.getUser()
       const uid = data?.user?.id ?? null
       setMeId(uid)
@@ -45,11 +57,19 @@ export default function CotizacionesFM() {
 
   const cargarListado = async () => {
     setCargando(true)
-    let q = supabase
-      .from('cotizaciones')
-      .select('*')
-      .order('numero', { ascending: false })
+    let q = supabase.from('cotizaciones').select('*').order('numero', { ascending: false })
 
+    // Filtro por N°/UUID
+    if (qId.trim()) {
+      if (isUUID(qId)) {
+        q = q.eq('id', qId.trim())
+      } else {
+        const n = parseNumero(qId)
+        if (n !== null) q = q.eq('numero', n)
+      }
+    }
+
+    // Resto de filtros
     if (qCliente) q = q.ilike('cliente', `%${qCliente}%`)
     if (desde) q = q.gte('fecha', desde)
     if (hasta) q = q.lte('fecha', hasta)
@@ -116,11 +136,8 @@ export default function CotizacionesFM() {
       return alert('Error al subir archivo: ' + upErr.message)
     }
 
-    // 3) Update con archivo_path (ahora permitido por RLS update_owner)
-    const { error: updErr } = await supabase
-      .from('cotizaciones')
-      .update({ archivo_path: path })
-      .eq('id', inserted.id)
+    // 3) Update con archivo_path (permitido por RLS update_owner)
+    const { error: updErr } = await supabase.from('cotizaciones').update({ archivo_path: path }).eq('id', inserted.id)
 
     setSubiendo(false)
     if (updErr) {
@@ -139,27 +156,24 @@ export default function CotizacionesFM() {
 
   const verArchivo = async (row: Cotizacion) => {
     if (!row.archivo_path) return alert('No hay archivo')
-    const { data, error } = await supabase.storage
-      .from('cotizaciones')
-      .createSignedUrl(row.archivo_path, 3600)
+    const { data, error } = await supabase.storage.from('cotizaciones').createSignedUrl(row.archivo_path, 3600)
     if (error || !data?.signedUrl) return alert('No se pudo obtener el archivo')
     window.open(data.signedUrl, '_blank')
   }
 
-  // 🔄 Cambiar estado desde la tabla (FM puede actualizar lo propio)
   const actualizarEstado = async (row: Cotizacion, nuevo: Estado) => {
     const prev = listado.slice()
     setListado((xs) => xs.map((r) => (r.id === row.id ? { ...r, estado: nuevo } : r)))
 
-    const { error } = await supabase
-      .from('cotizaciones')
-      .update({ estado: nuevo })
-      .eq('id', row.id)
-
+    const { error } = await supabase.from('cotizaciones').update({ estado: nuevo }).eq('id', row.id)
     if (error) {
       alert('No se pudo actualizar el estado: ' + error.message)
       setListado(prev) // rollback
     }
+  }
+
+  const onKeyDownBuscar = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') cargarListado()
   }
 
   return (
@@ -170,54 +184,26 @@ export default function CotizacionesFM() {
       <form onSubmit={subirCotizacion} style={styles.form}>
         <div style={styles.row}>
           <label style={styles.label}>Cliente *</label>
-          <input
-            value={cliente}
-            onChange={(e) => setCliente(e.target.value)}
-            style={styles.input}
-            placeholder="Cliente"
-            required
-          />
+          <input value={cliente} onChange={(e) => setCliente(e.target.value)} style={styles.input} placeholder="Cliente" required />
         </div>
 
         <div style={styles.row}>
           <label style={styles.label}>Descripción</label>
-          <input
-            value={descripcion}
-            onChange={(e) => setDescripcion(e.target.value)}
-            style={styles.input}
-            placeholder="Descripción"
-          />
+          <input value={descripcion} onChange={(e) => setDescripcion(e.target.value)} style={styles.input} placeholder="Descripción" />
         </div>
 
         <div style={styles.row3}>
           <div style={styles.col}>
             <label style={styles.label}>Monto</label>
-            <input
-              type="number"
-              value={monto}
-              onChange={(e) => setMonto(e.target.value)}
-              style={styles.input}
-              placeholder="0"
-              min="0"
-              step="0.01"
-            />
+            <input type="number" value={monto} onChange={(e) => setMonto(e.target.value)} style={styles.input} placeholder="0" min="0" step="0.01" />
           </div>
           <div style={styles.col}>
             <label style={styles.label}>Fecha</label>
-            <input
-              type="date"
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-              style={styles.input}
-            />
+            <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} style={styles.input} />
           </div>
           <div style={styles.col}>
             <label style={styles.label}>Estado</label>
-            <select
-              value={estado}
-              onChange={(e) => setEstado(e.target.value as Estado)}
-              style={styles.input}
-            >
+            <select value={estado} onChange={(e) => setEstado(e.target.value as Estado)} style={styles.input}>
               {estados.map((es) => (
                 <option key={es} value={es}>
                   {es}
@@ -251,9 +237,17 @@ export default function CotizacionesFM() {
       {/* Filtros */}
       <div style={styles.filters}>
         <input
+          placeholder="Buscar por N° o UUID…"
+          value={qId}
+          onChange={(e) => setQId(e.target.value)}
+          onKeyDown={onKeyDownBuscar}
+          style={styles.input}
+        />
+        <input
           placeholder="Buscar por cliente…"
           value={qCliente}
           onChange={(e) => setQCliente(e.target.value)}
+          onKeyDown={onKeyDownBuscar}
           style={styles.input}
         />
         <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} style={styles.input} />
@@ -286,11 +280,7 @@ export default function CotizacionesFM() {
                 <td>{row.monto ?? '-'}</td>
                 <td>{row.fecha ?? '-'}</td>
                 <td>
-                  <select
-                    value={row.estado}
-                    onChange={(e) => actualizarEstado(row, e.target.value as Estado)}
-                    style={styles.input}
-                  >
+                  <select value={row.estado} onChange={(e) => actualizarEstado(row, e.target.value as Estado)} style={styles.input}>
                     {estados.map((es) => (
                       <option key={es} value={es}>
                         {es}
@@ -322,71 +312,16 @@ export default function CotizacionesFM() {
 const styles: { [k: string]: React.CSSProperties } = {
   wrap: { maxWidth: 1000, margin: '0 auto', padding: 20, fontFamily: `'Segoe UI', sans-serif` },
   title: { margin: '0 0 12px', color: '#0f172a' },
-  form: {
-    border: '1px solid #e2e8f0',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    background: '#fff',
-  },
+  form: { border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, marginBottom: 16, background: '#fff' },
   row: { display: 'grid', gridTemplateColumns: '160px 1fr', alignItems: 'center', gap: 12, marginBottom: 10 },
   row3: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 10 },
   col: { display: 'grid', gridTemplateColumns: '1fr', gap: 6 },
   label: { color: '#475569', fontWeight: 600 },
-  input: {
-    border: '1px solid #cbd5e1',
-    borderRadius: 10,
-    padding: '10px 12px',
-    fontSize: 14,
-    outline: 'none',
-    background: '#fff',
-  },
-  btnPrimary: {
-    background: '#0ea5e9',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 10,
-    padding: '10px 14px',
-    cursor: 'pointer',
-    fontWeight: 600,
-  },
-  btnGhost: {
-    background: '#fff',
-    color: '#0f172a',
-    border: '1px solid #cbd5e1',
-    borderRadius: 10,
-    padding: '10px 14px',
-    cursor: 'pointer',
-    fontWeight: 600,
-  },
-  filters: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 160px 160px 160px',
-    gap: 8,
-    margin: '8px 0 16px',
-  },
-  btn: {
-    background: '#e2e8f0',
-    border: '1px solid #cbd5e1',
-    borderRadius: 10,
-    padding: '10px 12px',
-    cursor: 'pointer',
-    fontWeight: 600,
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'separate',
-    borderSpacing: 0,
-    background: '#fff',
-    border: '1px solid #e2e8f0',
-    borderRadius: 12,
-  } as React.CSSProperties,
-  linkBtn: {
-    background: '#f1f5f9',
-    border: '1px solid #cbd5e1',
-    borderRadius: 8,
-    padding: '6px 10px',
-    cursor: 'pointer',
-    fontWeight: 600,
-  },
+  input: { border: '1px solid #cbd5e1', borderRadius: 10, padding: '10px 12px', fontSize: 14, outline: 'none', background: '#fff' },
+  btnPrimary: { background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', fontWeight: 600 },
+  btnGhost: { background: '#fff', color: '#0f172a', border: '1px solid #cbd5e1', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', fontWeight: 600 },
+  filters: { display: 'grid', gridTemplateColumns: '1fr 1fr 160px 160px 160px', gap: 8, margin: '8px 0 16px' },
+  btn: { background: '#e2e8f0', border: '1px solid #cbd5e1', borderRadius: 10, padding: '10px 12px', cursor: 'pointer', fontWeight: 600 },
+  table: { width: '100%', borderCollapse: 'separate', borderSpacing: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12 },
+  linkBtn: { background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontWeight: 600 },
 }

@@ -31,6 +31,7 @@ export default function CotizacionesSuperadmin() {
   const [listado, setListado] = useState<Cotizacion[]>([])
 
   // filtros
+  const [qId, setQId] = useState('')          // N° o UUID
   const [fmId, setFmId] = useState<string>('')
   const [clienteQ, setClienteQ] = useState('')
   const [estado, setEstado] = useState<Estado | ''>('')
@@ -44,6 +45,15 @@ export default function CotizacionesSuperadmin() {
     () => ['cotizado', 'aprobado', 'cerrado', 'facturado', 'desestimado'],
     []
   )
+
+  // Helpers filtro ID/N°
+  const isUUID = (s: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s.trim())
+  const parseNumero = (s: string) => {
+    const raw = s.trim().replace(/^#/, '')
+    const n = parseInt(raw, 10)
+    return Number.isFinite(n) ? n : null
+  }
 
   useEffect(() => {
     cargarFMs()
@@ -72,6 +82,17 @@ export default function CotizacionesSuperadmin() {
       `)
       .order('numero', { ascending: false })
 
+    // Filtro por N°/UUID
+    if (qId.trim()) {
+      if (isUUID(qId)) {
+        q = q.eq('id', qId.trim())
+      } else {
+        const n = parseNumero(qId)
+        if (n !== null) q = q.eq('numero', n)
+      }
+    }
+
+    // Otros filtros
     if (fmId) q = q.eq('subida_por', fmId)
     if (clienteQ) q = q.ilike('cliente', `%${clienteQ}%`)
     if (estado) q = q.eq('estado', estado)
@@ -85,9 +106,7 @@ export default function CotizacionesSuperadmin() {
 
   const verArchivo = async (row: Cotizacion) => {
     if (!row.archivo_path) return alert('No hay archivo')
-    const { data, error } = await supabase.storage
-      .from('cotizaciones')
-      .createSignedUrl(row.archivo_path, 3600)
+    const { data, error } = await supabase.storage.from('cotizaciones').createSignedUrl(row.archivo_path, 3600)
     if (error || !data?.signedUrl) return alert('No se pudo obtener el archivo')
     window.open(data.signedUrl, '_blank')
   }
@@ -106,12 +125,24 @@ export default function CotizacionesSuperadmin() {
   const nombreFM = (u?: Usuario | null) =>
     u ? `${u.apellido ?? ''} ${u.nombre ?? ''}`.trim() || u.email || '—' : '—'
 
+  const onKeyDownBuscar = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') cargarListado()
+  }
+
   return (
     <div style={styles.wrap}>
       <h2 style={styles.title}>Gestionar Cotizaciones (Superadmin)</h2>
 
       {/* Filtros */}
       <div style={styles.filtros}>
+        <input
+          placeholder="N° o UUID…"
+          value={qId}
+          onChange={(e) => setQId(e.target.value)}
+          onKeyDown={onKeyDownBuscar}
+          style={styles.input}
+        />
+
         <select value={fmId} onChange={(e) => setFmId(e.target.value)} style={styles.input}>
           <option value="">Todos los FM</option>
           {fms.map((u) => (
@@ -125,14 +156,11 @@ export default function CotizacionesSuperadmin() {
           placeholder="Cliente…"
           value={clienteQ}
           onChange={(e) => setClienteQ(e.target.value)}
+          onKeyDown={onKeyDownBuscar}
           style={styles.input}
         />
 
-        <select
-          value={estado}
-          onChange={(e) => setEstado((e.target.value as Estado) || '')}
-          style={styles.input}
-        >
+        <select value={estado} onChange={(e) => setEstado((e.target.value as Estado) || '')} style={styles.input}>
           <option value="">Todos los estados</option>
           {estados.map((es) => (
             <option key={es} value={es}>
@@ -172,11 +200,7 @@ export default function CotizacionesSuperadmin() {
                 <td style={styles.td}>{r.monto ?? '—'}</td>
                 <td style={styles.td}>{r.fecha ?? '—'}</td>
                 <td style={styles.td}>
-                  <select
-                    value={r.estado}
-                    onChange={(e) => actualizarEstado(r.id, e.target.value as Estado)}
-                    style={styles.inputSm}
-                  >
+                  <select value={r.estado} onChange={(e) => actualizarEstado(r.id, e.target.value as Estado)} style={styles.inputSm}>
                     {estados.map((es) => (
                       <option key={es} value={es}>
                         {es}
@@ -211,50 +235,15 @@ const styles: { [k: string]: React.CSSProperties } = {
   title: { margin: '0 0 12px', color: '#0f172a' },
   filtros: {
     display: 'grid',
-    gridTemplateColumns: '240px 1fr 200px 160px 160px 160px',
+    gridTemplateColumns: '1fr 240px 1fr 200px 160px 160px 160px',
     gap: 8,
     marginBottom: 12,
   },
-  input: {
-    border: '1px solid #cbd5e1',
-    borderRadius: 10,
-    padding: '10px 12px',
-    fontSize: 14,
-    outline: 'none',
-    background: '#fff',
-  },
-  inputSm: {
-    border: '1px solid #cbd5e1',
-    borderRadius: 8,
-    padding: '6px 8px',
-    fontSize: 13,
-    outline: 'none',
-    background: '#fff',
-  },
-  btn: {
-    background: '#e2e8f0',
-    border: '1px solid #cbd5e1',
-    borderRadius: 10,
-    padding: '10px 12px',
-    cursor: 'pointer',
-    fontWeight: 600,
-  },
-  table: {
-    width: '100%',
-    borderCollapse: 'separate',
-    borderSpacing: 0,
-    background: '#fff',
-    border: '1px solid #e2e8f0',
-    borderRadius: 12,
-  },
+  input: { border: '1px solid #cbd5e1', borderRadius: 10, padding: '10px 12px', fontSize: 14, outline: 'none', background: '#fff' },
+  inputSm: { border: '1px solid #cbd5e1', borderRadius: 8, padding: '6px 8px', fontSize: 13, outline: 'none', background: '#fff' },
+  btn: { background: '#e2e8f0', border: '1px solid #cbd5e1', borderRadius: 10, padding: '10px 12px', cursor: 'pointer', fontWeight: 600 },
+  table: { width: '100%', borderCollapse: 'separate', borderSpacing: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12 },
   th: { textAlign: 'left', padding: '10px 12px', color: '#475569', background: '#f8fafc' },
   td: { padding: '10px 12px', borderTop: '1px solid #e2e8f0' },
-  linkBtn: {
-    background: '#f1f5f9',
-    border: '1px solid #cbd5e1',
-    borderRadius: 8,
-    padding: '6px 10px',
-    cursor: 'pointer',
-    fontWeight: 600,
-  },
+  linkBtn: { background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontWeight: 600 },
 }
