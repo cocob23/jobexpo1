@@ -3,7 +3,10 @@ import { router } from 'expo-router'
 import { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
+  Platform,
+  SafeAreaView,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
@@ -29,7 +32,7 @@ export default function ListaTecnicos() {
     const { data, error } = await supabase
       .from('usuarios')
       .select('id, nombre, apellido, rol')
-      .in('rol', ['mantenimiento', 'mantenimiento-externo']) // 👈 clave
+      .in('rol', ['mantenimiento', 'mantenimiento-externo'])
 
     if (error) {
       setErrorMsg('No se pudieron cargar los técnicos.')
@@ -54,67 +57,87 @@ export default function ListaTecnicos() {
   }, [busqueda, tecnicos])
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
-      <Text style={styles.titulo}>Técnicos de mantenimiento</Text>
+    <SafeAreaView style={styles.safe}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ paddingBottom: 120 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <Text style={styles.titulo}>Técnicos de mantenimiento</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Buscar técnico por nombre o apellido"
-        value={busqueda}
-        onChangeText={setBusqueda}
-      />
+        <TextInput
+          style={styles.input}
+          placeholder="Buscar técnico por nombre o apellido"
+          value={busqueda}
+          onChangeText={setBusqueda}
+          placeholderTextColor="#94a3b8"
+        />
 
-      {cargando ? (
-        <ActivityIndicator size="large" color="#2563EB" style={{ marginTop: 20 }} />
-      ) : errorMsg ? (
-        <Text style={{ color: '#ef4444', marginTop: 12 }}>{errorMsg}</Text>
-      ) : filtrados.length === 0 ? (
-        <View style={{ marginTop: 12 }}>
-          <Text style={{ color: '#64748b' }}>No se encontraron técnicos.</Text>
-        </View>
-      ) : (
-        filtrados.map((tecnico) => (
-          <TouchableOpacity
-            key={tecnico.id}
-            style={styles.card}
-            onPress={() => router.push(`/perfil-tecnico?id=${tecnico.id}`)}
-          >
-            <Text style={styles.cardNombre}>
-              {tecnico.nombre} {tecnico.apellido}
-            </Text>
-            <Text style={styles.cardRol}>
-              {tecnico.rol === 'mantenimiento-externo' ? 'Mantenimiento externo' : 'Mantenimiento'}
-            </Text>
-          </TouchableOpacity>
-        ))
-      )}
-    </ScrollView>
+        {cargando ? (
+          <ActivityIndicator size="large" color="#2563EB" style={{ marginTop: 20 }} />
+        ) : errorMsg ? (
+          <Text style={{ color: '#ef4444', marginTop: 12 }}>{errorMsg}</Text>
+        ) : filtrados.length === 0 ? (
+          <View style={{ marginTop: 12 }}>
+            <Text style={{ color: '#64748b' }}>No se encontraron técnicos.</Text>
+          </View>
+        ) : (
+          filtrados.map((tecnico) => (
+            <TouchableOpacity
+              key={tecnico.id}
+              style={styles.card}
+              onPress={() => router.push(`/perfil-tecnico?id=${tecnico.id}`)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.cardNombre}>
+                {tecnico.nombre} {tecnico.apellido}
+              </Text>
+              <Text style={styles.cardRol}>
+                {tecnico.rol === 'mantenimiento-externo'
+                  ? 'Mantenimiento externo'
+                  : 'Mantenimiento'}
+              </Text>
+            </TouchableOpacity>
+          ))
+        )}
+      </ScrollView>
+    </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 24,
-    backgroundColor: '#fff',
+  // Safe area + separación para notch
+  safe: {
     flex: 1,
+    backgroundColor: '#fff',
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 8 : 8,
+  },
+  container: {
+    flex: 1,
+    paddingHorizontal: 24,
+    backgroundColor: '#fff',
   },
   titulo: {
     fontSize: 22,
     fontWeight: 'bold',
     marginBottom: 20,
+    color: '#0f172a',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ccc',
+    borderColor: '#cbd5e1',
     borderRadius: 10,
     padding: 12,
     marginBottom: 16,
+    backgroundColor: '#fff',
   },
   card: {
     backgroundColor: '#f3f4f6',
     padding: 16,
-    borderRadius: 10,
+    borderRadius: 12,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
   },
   cardNombre: {
     fontSize: 16,

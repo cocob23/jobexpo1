@@ -1,13 +1,13 @@
 import { supabase } from '@/constants/supabase'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
   StatusBar,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -19,8 +19,11 @@ export default function AsignarInventario() {
   const [tipo, setTipo] = useState<'herramienta' | 'vestimenta'>('herramienta')
   const [descripcion, setDescripcion] = useState('')
   const [cantidad, setCantidad] = useState('')
+
   const [usuarios, setUsuarios] = useState<any[]>([])
+  const [busqueda, setBusqueda] = useState('')
   const [usuarioSeleccionado, setUsuarioSeleccionado] = useState<any>(null)
+
   const [cargando, setCargando] = useState(true)
 
   useEffect(() => {
@@ -39,6 +42,24 @@ export default function AsignarInventario() {
     }
     cargarUsuarios()
   }, [])
+
+  // Filtrado por nombre/apellido/email
+  const usuariosFiltrados = useMemo(() => {
+    const q = busqueda.trim().toLowerCase()
+    if (!q) return usuarios
+    return usuarios.filter((u) => {
+      const nombre = (u.nombre ?? '').toLowerCase()
+      const apellido = (u.apellido ?? '').toLowerCase()
+      const email = (u.email ?? '').toLowerCase()
+      const full = `${apellido} ${nombre}`.trim()
+      return (
+        nombre.includes(q) ||
+        apellido.includes(q) ||
+        email.includes(q) ||
+        full.includes(q)
+      )
+    })
+  }, [usuarios, busqueda])
 
   const asignar = async () => {
     if (!usuarioSeleccionado || !descripcion || !cantidad) {
@@ -65,6 +86,7 @@ export default function AsignarInventario() {
       setDescripcion('')
       setCantidad('')
       setUsuarioSeleccionado(null)
+      setBusqueda('')
     }
   }
 
@@ -78,20 +100,6 @@ export default function AsignarInventario() {
     )
   }
 
-  const renderUsuario = ({ item }: any) => (
-    <TouchableOpacity
-      onPress={() => setUsuarioSeleccionado(item)}
-      style={[
-        styles.usuarioItem,
-        usuarioSeleccionado?.id === item.id && styles.usuarioActivo,
-      ]}
-    >
-      <Text>
-        {`${item.apellido ?? ''} ${item.nombre ?? ''}`.trim() || item.email}
-      </Text>
-    </TouchableOpacity>
-  )
-
   return (
     <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView
@@ -99,77 +107,115 @@ export default function AsignarInventario() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
       >
-        <FlatList
-          data={usuarios}
-          keyExtractor={(item) => item.id}
-          renderItem={renderUsuario}
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={{ paddingBottom: 120 }}
           keyboardShouldPersistTaps="handled"
-          // spacing/padding general
-          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 120 }}
-          ListHeaderComponent={
-            <View style={{ paddingTop: 8 }}>
-              <Text style={styles.titulo}>Asignar inventario</Text>
+        >
+          <Text style={styles.titulo}>Asignar inventario</Text>
 
-              <Text style={styles.label}>Tipo</Text>
-              <View style={styles.tipoContainer}>
-                <TouchableOpacity
-                  style={[styles.tipoBoton, tipo === 'herramienta' && styles.tipoActivo]}
-                  onPress={() => setTipo('herramienta')}
-                >
-                  <Text style={[styles.tipoTexto, tipo !== 'herramienta' && styles.tipoTextoInactivo]}>
-                    Herramienta
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.tipoBoton, tipo === 'vestimenta' && styles.tipoActivo]}
-                  onPress={() => setTipo('vestimenta')}
-                >
-                  <Text style={[styles.tipoTexto, tipo !== 'vestimenta' && styles.tipoTextoInactivo]}>
-                    Vestimenta
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.label}>Descripción</Text>
-              <TextInput
-                style={styles.input}
-                value={descripcion}
-                onChangeText={setDescripcion}
-                placeholder="Ej: Destornillador Phillips"
-                placeholderTextColor="#94a3b8"
-              />
-
-              <Text style={styles.label}>Cantidad</Text>
-              <TextInput
-                style={styles.input}
-                value={cantidad}
-                onChangeText={setCantidad}
-                placeholder="Ej: 2"
-                keyboardType="numeric"
-                placeholderTextColor="#94a3b8"
-              />
-
-              <Text style={styles.label}>Seleccionar usuario</Text>
-            </View>
-          }
-          ListEmptyComponent={
-            <Text style={{ color: '#64748b', paddingVertical: 8 }}>
-              No hay usuarios para mostrar.
-            </Text>
-          }
-          ListFooterComponent={
-            <TouchableOpacity style={styles.boton} onPress={asignar}>
-              <Text style={styles.botonTexto}>Asignar</Text>
+          <Text style={styles.label}>Tipo</Text>
+          <View style={styles.tipoContainer}>
+            <TouchableOpacity
+              style={[styles.tipoBoton, tipo === 'herramienta' && styles.tipoActivo]}
+              onPress={() => setTipo('herramienta')}
+            >
+              <Text style={[styles.tipoTexto, tipo !== 'herramienta' && styles.tipoTextoInactivo]}>
+                Herramienta
+              </Text>
             </TouchableOpacity>
-          }
-        />
+            <TouchableOpacity
+              style={[styles.tipoBoton, tipo === 'vestimenta' && styles.tipoActivo]}
+              onPress={() => setTipo('vestimenta')}
+            >
+              <Text style={[styles.tipoTexto, tipo !== 'vestimenta' && styles.tipoTextoInactivo]}>
+                Vestimenta
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.label}>Descripción</Text>
+          <TextInput
+            style={styles.input}
+            value={descripcion}
+            onChangeText={setDescripcion}
+            placeholder="Ej: Destornillador Phillips"
+            placeholderTextColor="#94a3b8"
+          />
+
+          <Text style={styles.label}>Cantidad</Text>
+          <TextInput
+            style={styles.input}
+            value={cantidad}
+            onChangeText={setCantidad}
+            placeholder="Ej: 2"
+            keyboardType="numeric"
+            placeholderTextColor="#94a3b8"
+          />
+
+          <Text style={styles.label}>Seleccionar usuario</Text>
+          <TextInput
+            value={busqueda}
+            onChangeText={setBusqueda}
+            style={[styles.input, { marginBottom: 10 }]}
+            placeholder="Buscar por nombre, apellido o email"
+            placeholderTextColor="#94a3b8"
+          />
+
+          {/* Caja reducida y scrolleable para usuarios */}
+          <View style={styles.userBox}>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingVertical: 6 }}
+            >
+              {usuariosFiltrados.length ? (
+                usuariosFiltrados.map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    onPress={() => setUsuarioSeleccionado(item)}
+                    style={[
+                      styles.usuarioItem,
+                      usuarioSeleccionado?.id === item.id && styles.usuarioActivo,
+                    ]}
+                  >
+                    <Text style={styles.usuarioNombre}>
+                      {`${item.apellido ?? ''} ${item.nombre ?? ''}`.trim() || item.email}
+                    </Text>
+                    {item.email ? <Text style={styles.usuarioEmail}>{item.email}</Text> : null}
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <Text style={{ color: '#64748b', paddingHorizontal: 8 }}>
+                  {busqueda ? 'Sin resultados para tu búsqueda.' : 'No hay usuarios para mostrar.'}
+                </Text>
+              )}
+            </ScrollView>
+          </View>
+
+          {usuarioSeleccionado && (
+            <View style={styles.selBadge}>
+              <Text style={styles.selBadgeText}>
+                Seleccionado:{' '}
+                {`${usuarioSeleccionado.apellido ?? ''} ${usuarioSeleccionado.nombre ?? ''}`.trim() ||
+                  usuarioSeleccionado.email}
+              </Text>
+              <TouchableOpacity onPress={() => setUsuarioSeleccionado(null)}>
+                <Text style={styles.selBadgeClear}>Quitar</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          <TouchableOpacity style={styles.boton} onPress={asignar}>
+            <Text style={styles.botonTexto}>Asignar</Text>
+          </TouchableOpacity>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  // Safe area + separación para notch
+  // baja el contenido para que no lo tape el notch
   safe: {
     flex: 1,
     backgroundColor: '#fff',
@@ -177,6 +223,11 @@ const styles = StyleSheet.create({
   },
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
+  container: {
+    flex: 1,
+    paddingHorizontal: 24,
+    backgroundColor: '#fff',
+  },
   titulo: {
     fontSize: 22, fontWeight: 'bold', marginBottom: 16, color: '#0f172a',
   },
@@ -197,17 +248,48 @@ const styles = StyleSheet.create({
   tipoTexto: { fontWeight: '700', color: '#fff' },
   tipoTextoInactivo: { color: '#1e3a8a' },
 
-  usuarioItem: {
-    paddingVertical: 12, paddingHorizontal: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#e2e8f0',
+  // Caja de usuarios: cuadrado reducido, con scroll interno
+  userBox: {
+    maxHeight: 220,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    overflow: 'hidden',
     backgroundColor: '#fff',
   },
+  usuarioItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#fff',
+  },
+  usuarioNombre: { color: '#0f172a', fontWeight: '600' },
+  usuarioEmail: { color: '#64748b', fontSize: 12 },
   usuarioActivo: { backgroundColor: '#dbeafe' },
 
+  selBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingVertical: 6,
+  },
+  selBadgeText: { color: '#0f172a', fontWeight: '600' },
+  selBadgeClear: { color: '#dc2626', fontWeight: '700' },
+
   boton: {
-    backgroundColor: '#16a34a', paddingVertical: 14, borderRadius: 12,
-    alignItems: 'center', marginTop: 24, marginBottom: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.12, shadowRadius: 4, elevation: 2,
+    backgroundColor: '#16a34a',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 24,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.12,
+    shadowRadius: 4,
+    elevation: 2,
   },
   botonTexto: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 })
