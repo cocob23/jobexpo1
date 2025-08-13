@@ -1,3 +1,4 @@
+// app/(alguna-ruta)/PerfilTecnico.tsx
 import { supabase } from '@/constants/supabase'
 import { Buffer } from 'buffer'
 import dayjs from 'dayjs'
@@ -45,26 +46,25 @@ export default function PerfilTecnico() {
   const [documentos, setDocumentos] = useState<any>(null)
   const [refreshing, setRefreshing] = useState(false)
 
-  // ⬇️ Selector de período dinámico
+  // Selector de período
   const [periodo, setPeriodo] = useState<string>(() => dayjs().format('YYYY-MM'))
 
-  const [planillasMes, setPlanillasMes] = useState<Record<'gestion' | 'gastos', Planilla | null>>({
-    gestion: null,
-    gastos: null,
+  // Arrays por tipo
+  const [planillasMes, setPlanillasMes] = useState<Record<'gestion' | 'gastos', Planilla[]>>({
+    gestion: [],
+    gastos: [],
   })
 
   useEffect(() => {
     if (id) fetchDatos()
   }, [id])
 
-  // Re-cargar planillas cuando cambie el período
   useEffect(() => {
     if (id) cargarPlanillasMes(String(id), periodo)
   }, [id, periodo])
 
   const fetchDatos = async () => {
     try {
-      // Datos del técnico (empresa puede ser null)
       const { data: usuario, error: errorUsuario } = await supabase
         .from('usuarios')
         .select('id, nombre, apellido, empresa')
@@ -114,8 +114,7 @@ export default function PerfilTecnico() {
         .eq('tecnico_id', id)
         .maybeSingle()
       if (!errorDoc) setDocumentos(doc || null)
-
-      // ⚠️ Planillas ahora se cargan por useEffect cuando cambia "periodo"
+      // Planillas se recargan por useEffect(periodo)
     } catch (e) {
       console.log('fetchDatos exception:', e)
       Alert.alert('Error', 'Ocurrió un problema cargando el perfil.')
@@ -128,28 +127,26 @@ export default function PerfilTecnico() {
       .select('*')
       .eq('usuario_id', tecnicoId)
       .eq('periodo', per)
+      .order('creado_en', { ascending: false })
 
     if (error) {
       console.log('Error cargarPlanillasMes:', error)
       return
     }
 
-    const base = { gestion: null, gastos: null } as Record<'gestion' | 'gastos', Planilla | null>
-    ;(data || []).forEach((p: Planilla) => {
-      base[p.tipo] = p
-    })
+    const base: Record<'gestion' | 'gastos', Planilla[]> = { gestion: [], gastos: [] }
+    ;(data || []).forEach((p: Planilla) => { base[p.tipo].push(p) })
     setPlanillasMes(base)
   }
 
   const onRefresh = async () => {
     setRefreshing(true)
     await fetchDatos()
-    // Vuelve a pedir planillas para el período actual
     if (id) await cargarPlanillasMes(String(id), periodo)
     setRefreshing(false)
   }
 
-  // =================== PÓLIZA / ACTA ===================
+  // ======= PÓLIZA / ACTA (sin cambios de lógica) =======
   const subirDocumento = async (tipo: 'poliza' | 'acta') => {
     const result = await DocumentPicker.getDocumentAsync({
       type: 'application/pdf',
@@ -163,15 +160,11 @@ export default function PerfilTecnico() {
     const path = `${id}/${tipo}.pdf`
 
     try {
-      const base64 = await FileSystem.readAsStringAsync(fileUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      })
-
+      const base64 = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 })
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData.session?.access_token
       if (!token) throw new Error('no se pudo obtener el token')
 
-      // ⚠️ Ajustá la URL base a tu proyecto si no coincide:
       const uploadRes = await fetch(
         `https://lknfaxkigownvjsijzhb.supabase.co/storage/v1/object/${bucket}/${path}`,
         {
@@ -282,14 +275,9 @@ export default function PerfilTecnico() {
       ]
     )
   }
-  // =================== FIN PÓLIZA / ACTA ===================
+  // ======= FIN PÓLIZA / ACTA =======
 
-  const verPlanilla = async (p: Planilla | null) => {
-    if (!p) {
-      Alert.alert('Sin archivo', 'Todavía no hay archivo para este mes.')
-      return
-    }
-
+  const verPlanilla = async (p: Planilla) => {
     const { data, error } = await supabase
       .storage
       .from(p.bucket)
@@ -313,16 +301,12 @@ export default function PerfilTecnico() {
         <>
           <Image
             source={{
-              uri:
-                tecnico.avatar_url ||
-                'https://ui-avatars.com/api/?name=User&background=ccc&color=000&size=128',
+              uri: tecnico.avatar_url || 'https://ui-avatars.com/api/?name=User&background=ccc&color=000&size=128',
             }}
             style={styles.avatar}
           />
           <Text style={styles.nombre}>{tecnico.nombre} {tecnico.apellido}</Text>
-          <Text style={styles.empresa}>
-            Empresa asignada: {tecnico.empresa ?? 'Sin asignar'}
-          </Text>
+          <Text style={styles.empresa}>Empresa asignada: {tecnico.empresa ?? 'Sin asignar'}</Text>
 
           <Text style={styles.subtitulo}>Próximas tareas:</Text>
           {tareas.length === 0 ? (
@@ -331,9 +315,7 @@ export default function PerfilTecnico() {
             tareas.map((t: any, i: number) => (
               <View key={i} style={styles.cardTarea}>
                 <Text style={styles.tareaTitulo}>{t.descripcion}</Text>
-                <Text style={styles.tareaFecha}>
-                  {dayjs(t.fecha_realizacion).format('DD/MM HH:mm')}hs
-                </Text>
+                <Text style={styles.tareaFecha}>{dayjs(t.fecha_realizacion).format('DD/MM HH:mm')}hs</Text>
               </View>
             ))
           )}
@@ -358,7 +340,7 @@ export default function PerfilTecnico() {
             <Text style={styles.botonTexto}>Eliminar acta de compromiso</Text>
           </TouchableOpacity>
 
-          {/* ---------- Planillas ---------- */}
+          {/* ---------- Planillas (período) ---------- */}
           <Text style={[styles.subtitulo, { marginTop: 24 }]}>
             Planillas (Período {periodo})
           </Text>
@@ -367,10 +349,7 @@ export default function PerfilTecnico() {
           <View style={styles.periodRow}>
             <TouchableOpacity
               style={styles.periodBtn}
-              onPress={() => {
-                const prev = dayjs(`${periodo}-01`).subtract(1, 'month').format('YYYY-MM')
-                setPeriodo(prev)
-              }}
+              onPress={() => setPeriodo(dayjs(`${periodo}-01`).subtract(1, 'month').format('YYYY-MM'))}
             >
               <Text style={styles.periodBtnText}>◀ Mes anterior</Text>
             </TouchableOpacity>
@@ -383,33 +362,37 @@ export default function PerfilTecnico() {
 
             <TouchableOpacity
               style={styles.periodBtn}
-              onPress={() => {
-                const next = dayjs(`${periodo}-01`).add(1, 'month').format('YYYY-MM')
-                setPeriodo(next)
-              }}
+              onPress={() => setPeriodo(dayjs(`${periodo}-01`).add(1, 'month').format('YYYY-MM'))}
             >
               <Text style={styles.periodBtnText}>Mes siguiente ▶</Text>
             </TouchableOpacity>
           </View>
 
           {(['gestion', 'gastos'] as const).map((tipo) => {
-            const p = planillasMes[tipo]
+            const lista = planillasMes[tipo]
             return (
               <View key={tipo} style={styles.cardTarea}>
-                <Text style={styles.tareaTitulo}>{TIPO_LABEL[tipo]}</Text>
-                <Text style={{ color: '#64748b', marginTop: 4 }}>
-                  {p ? `Archivo: ${nombreArchivo(p.archivo_path)} • ${p.archivo_mimetype}` : 'Sin archivo subido este mes'}
-                </Text>
+                <Text style={styles.tareaTitulo}>{TIPO_LABEL[tipo]} <Text style={{ color: '#64748b' }}>({lista.length}/2)</Text></Text>
 
-                <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-                  <TouchableOpacity
-                    style={[styles.botonMini, !p && styles.botonMiniDisabled]}
-                    onPress={() => verPlanilla(p)}
-                    disabled={!p}
-                  >
-                    <Text style={styles.botonMiniTexto}>{p ? 'Ver / Descargar' : 'Sin archivo'}</Text>
-                  </TouchableOpacity>
-                </View>
+                {lista.length === 0 ? (
+                  <Text style={{ color: '#64748b', marginTop: 4 }}>Sin archivo subido este mes</Text>
+                ) : (
+                  <View style={{ gap: 8, marginTop: 6 }}>
+                    {lista.map((p) => (
+                      <View key={p.id} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <View style={{ flex: 1, paddingRight: 10 }}>
+                          <Text style={{ fontWeight: '600' }}>{nombreArchivo(p.archivo_path)}</Text>
+                          <Text style={{ color: '#64748b', fontSize: 12 }}>
+                            {p.archivo_mimetype} • subido {dayjs(p.creado_en).format('DD/MM/YYYY HH:mm')}
+                          </Text>
+                        </View>
+                        <TouchableOpacity style={styles.botonMini} onPress={() => verPlanilla(p)}>
+                          <Text style={styles.botonMiniTexto}>Ver / Descargar</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
             )
           })}
@@ -440,35 +423,14 @@ const styles = StyleSheet.create({
     borderColor: '#1e40af',
     marginBottom: 16,
   },
-  nombre: {
-    fontSize: 22,
-    fontWeight: 'bold',
-  },
-  empresa: {
-    fontSize: 16,
-    marginBottom: 20,
-    color: '#475569',
-  },
-  subtitulo: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    alignSelf: 'flex-start',
-    marginBottom: 8,
-  },
-  cardTarea: {
-    backgroundColor: '#f3f4f6',
-    padding: 12,
-    borderRadius: 8,
-    width: '100%',
-    marginBottom: 10,
-  },
-  tareaTitulo: {
-    fontWeight: 'bold',
-  },
-  tareaFecha: {
-    color: '#2563EB',
-    marginTop: 4,
-  },
+  nombre: { fontSize: 22, fontWeight: 'bold' },
+  empresa: { fontSize: 16, marginBottom: 20, color: '#475569' },
+  subtitulo: { fontSize: 18, fontWeight: 'bold', alignSelf: 'flex-start', marginBottom: 8 },
+
+  cardTarea: { backgroundColor: '#f3f4f6', padding: 12, borderRadius: 8, width: '100%', marginBottom: 10 },
+  tareaTitulo: { fontWeight: 'bold' },
+  tareaFecha: { color: '#2563EB', marginTop: 4 },
+
   boton: {
     backgroundColor: '#1e40af',
     padding: 12,
@@ -477,23 +439,11 @@ const styles = StyleSheet.create({
     width: '100%',
     alignItems: 'center',
   },
-  botonTexto: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  botonMini: {
-    backgroundColor: '#111827',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 8,
-  },
-  botonMiniTexto: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  botonMiniDisabled: {
-    opacity: 0.5,
-  },
+  botonTexto: { color: '#fff', fontWeight: 'bold' },
+
+  botonMini: { backgroundColor: '#111827', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8 },
+  botonMiniTexto: { color: '#fff', fontWeight: '600' },
+  botonMiniDisabled: { opacity: 0.5 },
 
   /* Período */
   periodRow: {
@@ -504,25 +454,8 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 8,
   },
-  periodBtn: {
-    backgroundColor: '#111827',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-  },
-  periodBtnText: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  periodBadge: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: '#e5e7eb',
-  },
-  periodBadgeText: {
-    color: '#111827',
-    fontWeight: '700',
-    textTransform: 'capitalize',
-  },
+  periodBtn: { backgroundColor: '#111827', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8 },
+  periodBtnText: { color: '#fff', fontWeight: '600' },
+  periodBadge: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: '#e5e7eb' },
+  periodBadgeText: { color: '#111827', fontWeight: '700', textTransform: 'capitalize' },
 })

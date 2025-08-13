@@ -17,8 +17,8 @@ type Planilla = {
   usuario_id: string
   tipo: 'gestion' | 'gastos'
   periodo: string // 'YYYY-MM'
-  bucket: string  // NUEVO: 'planillas_gestion' | 'planillas_gastos'
-  archivo_path: string // ej: <uid>/YYYY-MM.xlsx (ruta relativa dentro del bucket)
+  bucket: string  // 'planillas_gestion' | 'planillas_gastos'
+  archivo_path: string // <uid>/<YYYY-MM>/<timestamp>-<name>.<ext>
   archivo_mimetype: string
   creado_en: string
 }
@@ -33,11 +33,11 @@ const BUCKETS: Record<'gestion' | 'gastos', string> = {
   gastos: 'planillas_gastos',
 }
 
-// Obtiene https://<project>.supabase.co a partir de restUrl
+const MAX_POR_TIPO = 2
+
 function getProjectBaseUrl() {
   const restUrl = (supabase as any)?.restUrl as string | undefined
   if (restUrl) return restUrl.replace('/rest/v1', '')
-  // Fallback a variable pública si la usás:
   // @ts-ignore
   return process.env.EXPO_PUBLIC_SUPABASE_URL || ''
 }
@@ -46,32 +46,41 @@ export default function PlanillasExternasScreen() {
   const [userId, setUserId] = useState<string | null>(null)
   const [cargando, setCargando] = useState(true)
   const [subiendo, setSubiendo] = useState<'gestion' | 'gastos' | null>(null)
-  const [planillasMes, setPlanillasMes] = useState<Record<'gestion' | 'gastos', Planilla | null>>({
-    gestion: null,
-    gastos: null
-  })
 
-  const periodoActual = dayjs().format('YYYY-MM')
+  // ⬇️ Período seleccionable (por defecto mes actual)
+  const [periodo, setPeriodo] = useState<string>(() => dayjs().format('YYYY-MM'))
+
+  // Arrays por tipo (múltiples, tope 2)
+  const [planillasMes, setPlanillasMes] = useState<Record<'gestion' | 'gastos', Planilla[]>>({
+    gestion: [],
+    gastos: [],
+  })
 
   useEffect(() => {
     init()
   }, [])
+
+  // re-cargar cuando cambie el período
+  useEffect(() => {
+    if (userId) cargarPlanillasMes(userId, periodo)
+  }, [userId, periodo])
 
   const init = async () => {
     setCargando(true)
     const { data } = await supabase.auth.getUser()
     const uid = data.user?.id ?? null
     setUserId(uid)
-    if (uid) await cargarPlanillasMes(uid)
+    if (uid) await cargarPlanillasMes(uid, periodo)
     setCargando(false)
   }
 
-  const cargarPlanillasMes = async (uid: string) => {
+  async function cargarPlanillasMes(uid: string, per: string) {
     const { data, error } = await supabase
       .from('planillas_ext')
       .select('*')
       .eq('usuario_id', uid)
-      .eq('periodo', periodoActual)
+      .eq('periodo', per)
+      .order('creado_en', { ascending: false })
 
     if (error) {
       console.log('Error cargarPlanillasMes:', error)
@@ -79,16 +88,20 @@ export default function PlanillasExternasScreen() {
       return
     }
 
-    const base = { gestion: null, gastos: null } as Record<'gestion'|'gastos', Planilla | null>
-    ;(data || []).forEach((p: Planilla) => {
-      base[p.tipo] = p
-    })
+    const base: Record<'gestion'|'gastos', Planilla[]> = { gestion: [], gastos: [] }
+    ;(data || []).forEach((p: Planilla) => { base[p.tipo].push(p) })
     setPlanillasMes(base)
   }
 
   const pickAndUpload = async (tipo: 'gestion' | 'gastos') => {
     if (!userId) {
       Alert.alert('Sesión', 'No hay usuario autenticado.')
+      return
+    }
+
+    const existentes = planillasMes[tipo].length
+    if (existentes >= MAX_POR_TIPO) {
+      Alert.alert('Límite alcanzado', `Ya subiste ${MAX_POR_TIPO} archivos de ${tipo} para ${dayjs(`${periodo}-01`).format('MMMM YYYY')}.`)
       return
     }
 
@@ -116,8 +129,9 @@ export default function PlanillasExternasScreen() {
 
       const ext = getExtension(name, mime)
       const bucket = BUCKETS[tipo]
-      // Guardamos por usuario y mes: <uid>/<YYYY-MM>.<ext>
-      const path = `${userId}/${periodoActual}.${ext}`
+      const safeName = sanitizeFilename(name.replace(/\.[^/.]+$/, ''))
+      // ruta única por mes seleccionado
+      const path = `${userId}/${periodo}/${Date.now()}-${safeName}.${ext}`
 
       const baseUrl = getProjectBaseUrl()
       if (!baseUrl) {
@@ -138,11 +152,11 @@ export default function PlanillasExternasScreen() {
       const res = await fetch(uploadUrl, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
+          Authorization: `Bearer ${accessToken}`,
           'Content-Type': mime,
-          'x-upsert': 'true'
+          'x-upsert': 'true',
         } as any,
-        body: bytes as any
+        body: bytes as any,
       })
 
       if (!res.ok) {
@@ -153,23 +167,23 @@ export default function PlanillasExternasScreen() {
         return
       }
 
-      // Registramos/actualizamos en la tabla
-      const { error: upsertError } = await supabase
+      // Insert (NO upsert) para permitir múltiples
+      const { error: insertError } = await supabase
         .from('planillas_ext')
-        .upsert({
+        .insert({
           usuario_id: userId,
           tipo,
-          periodo: periodoActual,
-          bucket,             // guardamos bucket
-          archivo_path: path, // ruta relativa dentro del bucket
-          archivo_mimetype: mime
-        }, { onConflict: 'usuario_id,tipo,periodo' })
+          periodo, // <== periodo seleccionado
+          bucket,
+          archivo_path: path,
+          archivo_mimetype: mime,
+        })
 
-      if (upsertError) {
-        console.log('Upsert error planillas_ext:', upsertError)
-        Alert.alert('Aviso', 'El archivo se subió pero no se pudo registrar en la base.')
+      if (insertError) {
+        console.log('Insert error planillas_ext:', insertError)
+        Alert.alert('Aviso', `El archivo se subió pero no se pudo registrar: ${insertError.message}`)
       } else {
-        await cargarPlanillasMes(userId)
+        await cargarPlanillasMes(userId, periodo)
         Alert.alert('Listo', 'Archivo subido correctamente.')
       }
     } catch (e: any) {
@@ -180,24 +194,28 @@ export default function PlanillasExternasScreen() {
     }
   }
 
-  const verPlanilla = async (p: Planilla | null) => {
-    if (!p) {
-      Alert.alert('Sin archivo', 'Todavía no hay archivo para este mes.')
-      return
-    }
-
+  const verPlanilla = async (p: Planilla) => {
+    // 1) Intento con Signed URL
     const { data, error } = await supabase
       .storage
-      .from(p.bucket) // usa el bucket guardado
+      .from(p.bucket)
       .createSignedUrl(p.archivo_path, 60 * 5)
 
-    if (error || !data?.signedUrl) {
-      console.log('SignedUrl error:', error)
-      Alert.alert('Error', 'No se pudo generar el enlace.')
+    if (data?.signedUrl) {
+      Linking.openURL(encodeURI(data.signedUrl))
       return
     }
 
-    Linking.openURL(data.signedUrl)
+    // 2) Fallback a URL pública (si el bucket es público)
+    const pub = supabase.storage.from(p.bucket).getPublicUrl(p.archivo_path)
+    const url = pub?.data?.publicUrl
+    if (url) {
+      Linking.openURL(encodeURI(url))
+      return
+    }
+
+    console.log('SignedUrl error:', error)
+    Alert.alert('Error', 'No se pudo generar el enlace para abrir la planilla.')
   }
 
   if (cargando) {
@@ -212,39 +230,79 @@ export default function PlanillasExternasScreen() {
   return (
     <SafeAreaView style={styles.safe}>
       <ScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.titulo}>Planillas (Periodo {periodoActual})</Text>
+        <Text style={styles.titulo}>
+          Planillas (Período {dayjs(`${periodo}-01`).format('MMMM YYYY')})
+        </Text>
         <Text style={styles.parrafo}>
-          Subí a fin de mes tus planillas en PDF o Excel. Podés reemplazar el archivo del mes actual.
+          Máximo {MAX_POR_TIPO} archivos por tipo y por mes. Elegí el mes con los botones de abajo.
         </Text>
 
+        {/* Selector de período */}
+        <View style={styles.periodRow}>
+          <TouchableOpacity
+            style={styles.periodBtn}
+            onPress={() => setPeriodo(dayjs(`${periodo}-01`).subtract(1, 'month').format('YYYY-MM'))}
+          >
+            <Text style={styles.periodBtnText}>◀ Mes anterior</Text>
+          </TouchableOpacity>
+
+          <View style={styles.periodBadge}>
+            <Text style={styles.periodBadgeText}>
+              {dayjs(`${periodo}-01`).format('MMMM YYYY')}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            style={styles.periodBtn}
+            onPress={() => setPeriodo(dayjs(`${periodo}-01`).add(1, 'month').format('YYYY-MM'))}
+          >
+            <Text style={styles.periodBtnText}>Mes siguiente ▶</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Gestión / Gastos */}
         {(['gestion','gastos'] as const).map((tipo) => {
-          const current = planillasMes[tipo]
+          const lista = planillasMes[tipo]
+          const existentes = lista.length
+          const lleno = existentes >= MAX_POR_TIPO
+
           return (
             <View key={tipo} style={styles.card}>
-              <Text style={styles.cardTitle}>{TIPO_LABEL[tipo]}</Text>
+              <Text style={styles.cardTitle}>
+                {TIPO_LABEL[tipo]}{' '}
+                <Text style={{ color: '#64748b' }}>({existentes}/{MAX_POR_TIPO})</Text>
+              </Text>
 
               <View style={styles.row}>
                 <TouchableOpacity
-                  style={[styles.btn, subiendo === tipo && styles.btnDisabled]}
+                  style={[styles.btn, (subiendo === tipo || lleno) && styles.btnDisabled]}
                   onPress={() => pickAndUpload(tipo)}
-                  disabled={!!subiendo}
+                  disabled={!!subiendo || lleno}
                 >
-                  <Text style={styles.btnText}>{subiendo === tipo ? 'Subiendo…' : 'Subir / Reemplazar'}</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.btnSecondary, !current && styles.btnDisabled]}
-                  onPress={() => verPlanilla(current)}
-                  disabled={!current}
-                >
-                  <Text style={styles.btnSecondaryText}>{current ? 'Ver / Descargar' : 'Sin archivo'}</Text>
+                  <Text style={styles.btnText}>
+                    {subiendo === tipo ? 'Subiendo…' : (lleno ? 'Máximo alcanzado' : 'Subir archivo')}
+                  </Text>
                 </TouchableOpacity>
               </View>
 
-              {current && (
-                <Text style={styles.meta}>
-                  Archivo: {fileNameFromPath(current.archivo_path)} • {current.archivo_mimetype}
-                </Text>
+              {lista.length === 0 ? (
+                <Text style={styles.meta}>Sin archivos este mes</Text>
+              ) : (
+                <View style={{ marginTop: 8, gap: 8 }}>
+                  {lista.map((p) => (
+                    <View key={p.id} style={styles.rowItem}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontWeight: '700' }}>{fileNameFromPath(p.archivo_path)}</Text>
+                        <Text style={{ fontSize: 12, color: '#475569' }}>
+                          {p.archivo_mimetype} • subido {dayjs(p.creado_en).format('DD/MM/YYYY HH:mm')}
+                        </Text>
+                      </View>
+                      <TouchableOpacity style={styles.btnSecondary} onPress={() => verPlanilla(p)}>
+                        <Text style={styles.btnSecondaryText}>Ver / Descargar</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </View>
               )}
             </View>
           )
@@ -254,6 +312,7 @@ export default function PlanillasExternasScreen() {
   )
 }
 
+/* Helpers */
 function guessMimeFromName(name: string) {
   const lower = name.toLowerCase()
   if (lower.endsWith('.pdf')) return 'application/pdf'
@@ -261,7 +320,6 @@ function guessMimeFromName(name: string) {
   if (lower.endsWith('.xls')) return 'application/vnd.ms-excel'
   return 'application/octet-stream'
 }
-
 function getExtension(name: string, mime: string) {
   const lower = name.toLowerCase()
   if (lower.endsWith('.pdf')) return 'pdf'
@@ -272,16 +330,22 @@ function getExtension(name: string, mime: string) {
   if (mime === 'application/vnd.ms-excel') return 'xls'
   return 'bin'
 }
-
+function sanitizeFilename(name: string) {
+  return name
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9-_]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase()
+}
 function fileNameFromPath(p: string) {
   const parts = p.split('/')
   return parts[parts.length - 1] || p
 }
 
+/* UI */
 const styles = StyleSheet.create({
-  // margen superior + fondo blanco para evitar notch y dar aire
   safe: { flex: 1, backgroundColor: '#fff', paddingTop: 8 },
-  // más padding abajo para que no quede todo pegado
   container: { padding: 16, paddingBottom: 48, gap: 16 },
   center: { alignItems: 'center', justifyContent: 'center' },
 
@@ -292,12 +356,35 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: '600' },
 
   row: { flexDirection: 'row', gap: 10 },
+  rowItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    padding: 10,
+  },
+
   btn: { backgroundColor: '#111', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10 },
   btnText: { color: '#fff', fontWeight: '600' },
 
-  btnSecondary: { borderWidth: 1, borderColor: '#111', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10 },
+  btnSecondary: { borderWidth: 1, borderColor: '#111', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10 },
   btnSecondaryText: { color: '#111', fontWeight: '600' },
 
   btnDisabled: { opacity: 0.5 },
   meta: { fontSize: 12, color: '#666' },
+
+  /* Período */
+  periodRow: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  periodBtn: { backgroundColor: '#111827', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8 },
+  periodBtnText: { color: '#fff', fontWeight: '600' },
+  periodBadge: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: '#e5e7eb' },
+  periodBadgeText: { color: '#111827', fontWeight: '700', textTransform: 'capitalize' },
 })
