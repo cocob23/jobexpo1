@@ -1,3 +1,4 @@
+// app/(superadmin)/_layout.tsx
 import { Tabs } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { Platform } from 'react-native'
@@ -5,6 +6,7 @@ import { Platform } from 'react-native'
 export default function SuperadminTabsLayout() {
   return (
     <Tabs
+      safeAreaInsets={{ bottom: 8 }}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: '#2563EB',
@@ -33,16 +35,7 @@ export default function SuperadminTabsLayout() {
         options={{
           title: 'Usuarios',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-add-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="tickets"
-        options={{
-          title: 'Tickets',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="document-text-outline" size={size} color={color} />
+            <Ionicons name="people-outline" size={size} color={color} />
           ),
         }}
       />
@@ -56,6 +49,15 @@ export default function SuperadminTabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="tickets"
+        options={{
+          title: 'Tickets',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="document-text-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="perfil"
         options={{
           title: 'Perfil',
@@ -65,14 +67,13 @@ export default function SuperadminTabsLayout() {
         }}
       />
 
-      {/* --- rutas ocultas (no aparecen en la tab bar) --- */}
+      {/* --- rutas existentes que NO deben aparecer en la tab bar --- */}
       <Tabs.Screen name="inventario" options={{ href: null }} />
+      <Tabs.Screen name="llegadas" options={{ href: null }} />
+      <Tabs.Screen name="detalle-cotizacion" options={{ href: null }} />
+      <Tabs.Screen name="asignar-tarea" options={{ href: null }} />
       <Tabs.Screen name="tecnicos" options={{ href: null }} />
       <Tabs.Screen name="ver-tareas" options={{ href: null }} />
-      <Tabs.Screen name="llegadas" options={{ href: null }} />
-      <Tabs.Screen name="asignar-tarea" options={{ href: null }} />
-      <Tabs.Screen name="detalle-tarea-fm" options={{ href: null }} />
-      <Tabs.Screen name="detalle-tarea-mantenimiento" options={{ href: null }} />
     </Tabs>
   )
 }
