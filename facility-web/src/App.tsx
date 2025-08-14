@@ -30,6 +30,7 @@ import AsignarTareaSA from './superadmin/asignar-tarea'
 import VerTareasSA from './superadmin/ver-tareas'
 import LlegadasSA from './superadmin/llegadas'
 import CotizacionesSuperadmin from './superadmin/cotizaciones'
+import DetalleTareaSA from './superadmin/detalle-tarea' // ⬅️ agregado
 
 // Mantenimiento Externo
 import TecnicosExternosLayout from './mantenimiento-externo/TecnicosExternosLayout'
@@ -61,6 +62,7 @@ export default function App() {
           <Route path="tecnicos" element={<TecnicosSA />} />
           <Route path="asignar-tarea" element={<AsignarTareaSA />} />
           <Route path="ver-tareas" element={<VerTareasSA />} />
+          <Route path="detalle-tarea/:id" element={<DetalleTareaSA />} /> {/* ⬅️ agregado */}
           <Route path="tickets" element={<TicketsSA />} />
           <Route path="perfil" element={<PerfilSuperadmin />} />
           <Route path="perfil-tecnico/:id" element={<PerfilTecnicoSA />} />
@@ -104,7 +106,7 @@ export default function App() {
           <Route path="perfil" element={<PerfilExterno />} /> {/* ⬅️ nuevo */}
         </Route>
 
-        {/* Redirección de la ruta vieja (si alguien entra por /tecnicos-externos) */}
+        {/* Redirección de la ruta vieja */}
         <Route path="/tecnicos-externos" element={<Navigate to="/mantenimiento-externo" replace />} />
 
         <Route path="*" element={<Navigate to="/login" />} />

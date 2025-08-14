@@ -11,8 +11,8 @@ type Tarea = {
   estado: Estado
   empresa: string | null
   fecha_realizacion: string | null
-  usuarios: UsuarioMin | null   // técnico (normalizado a 1 objeto)
-  fm: UsuarioMin | null         // FM (normalizado a 1 objeto)
+  usuarios: UsuarioMin | null
+  fm: UsuarioMin | null
 }
 
 type TareaRaw = Omit<Tarea, 'usuarios' | 'fm'> & {
@@ -26,7 +26,7 @@ export default function VerTareasSuperadmin() {
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
 
-  // Filtros (no aplican automáticamente)
+  // Filtros
   const [filtroEstado, setFiltroEstado] = useState<Estado>('Pendiente')
   const [fmInput, setFmInput] = useState('')
   const [empresaInput, setEmpresaInput] = useState('')
@@ -146,8 +146,14 @@ export default function VerTareasSuperadmin() {
   }
 
   const irADetalle = (id: number) => {
-    // ✅ Navegación correcta con parámetro de ruta
     navigate(`/superadmin/detalle-tarea/${id}`)
+  }
+
+  // 👉 click dinámico en chips (sólo cambia estado y aplica filtros)
+  const onChipClick = (estado: Estado) => {
+    if (estado === filtroEstado) return
+    setFiltroEstado(estado)
+    aplicarFiltros({ filtroEstado: estado })
   }
 
   return (
@@ -166,14 +172,22 @@ export default function VerTareasSuperadmin() {
           {/* Estado */}
           <div style={styles.chipsRow}>
             <button
-              onClick={() => setFiltroEstado('Pendiente')}
-              style={{ ...styles.chip, ...(filtroEstado === 'Pendiente' ? styles.chipActive : {}) }}
+              onClick={() => onChipClick('Pendiente')}
+              aria-pressed={filtroEstado === 'Pendiente'}
+              style={{
+                ...styles.chip,
+                ...(filtroEstado === 'Pendiente' ? styles.chipActive : {}),
+              }}
             >
               Pendientes
             </button>
             <button
-              onClick={() => setFiltroEstado('Realizado')}
-              style={{ ...styles.chip, ...(filtroEstado === 'Realizado' ? styles.chipActive : {}) }}
+              onClick={() => onChipClick('Realizado')}
+              aria-pressed={filtroEstado === 'Realizado'}
+              style={{
+                ...styles.chip,
+                ...(filtroEstado === 'Realizado' ? styles.chipActive : {}),
+              }}
             >
               Realizadas
             </button>
@@ -219,8 +233,12 @@ export default function VerTareasSuperadmin() {
             </div>
 
             <div style={styles.applyRow}>
-              <button onClick={limpiarFiltros} style={styles.btnLight}>Limpiar</button>
-              <button onClick={() => aplicarFiltros()} style={styles.btnPrimary}>Aplicar filtros</button>
+              <button onClick={limpiarFiltros} disabled={loading} style={styles.btnLight}>
+                Limpiar
+              </button>
+              <button onClick={() => aplicarFiltros()} disabled={loading} style={styles.btnPrimary}>
+                {loading ? 'Aplicando…' : 'Aplicar filtros'}
+              </button>
             </div>
           </div>
         </div>
@@ -238,24 +256,37 @@ export default function VerTareasSuperadmin() {
       ) : (
         <div style={styles.cardsWrapper}>
           <div style={styles.cardsGrid}>
-            {tareas.map((t) => (
-              <div
-                key={t.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => irADetalle(t.id)}
-                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && irADetalle(t.id)}
-                style={styles.card}
-                onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.08)' }}
-                onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.06)' }}
-              >
-                <h4 style={styles.cardTitle}>{t.descripcion || 'Sin descripción'}</h4>
-                <p style={styles.cardLine}><strong>Técnico:</strong> {t.usuarios?.nombre} {t.usuarios?.apellido}</p>
-                <p style={styles.cardLine}><strong>FM:</strong> {t.fm?.nombre} {t.fm?.apellido}</p>
-                <p style={styles.cardLine}><strong>Empresa:</strong> {t.empresa || '—'}</p>
-                <p style={styles.cardLine}><strong>Fecha:</strong> {fmtFecha(t.fecha_realizacion)}</p>
-              </div>
-            ))}
+            {tareas.map((t) => {
+              const realizada = t.estado === 'Realizado'
+              return (
+                <div
+                  key={t.id}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => irADetalle(t.id)}
+                  onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && irADetalle(t.id)}
+                  style={styles.card}
+                  onMouseOver={(e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 6px 12px rgba(0,0,0,0.08)' }}
+                  onMouseOut={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.06)' }}
+                >
+                  <div style={styles.cardHeader}>
+                    <h4 style={styles.cardTitle}>{t.descripcion || 'Sin descripción'}</h4>
+                    <span
+                      style={{
+                        ...styles.badge,
+                        ...(realizada ? styles.badgeOk : styles.badgePending),
+                      }}
+                    >
+                      {realizada ? 'REALIZADA' : 'NO REALIZADA'}
+                    </span>
+                  </div>
+                  <p style={styles.cardLine}><strong>Técnico:</strong> {t.usuarios?.nombre} {t.usuarios?.apellido}</p>
+                  <p style={styles.cardLine}><strong>FM:</strong> {t.fm?.nombre} {t.fm?.apellido}</p>
+                  <p style={styles.cardLine}><strong>Empresa:</strong> {t.empresa || '—'}</p>
+                  <p style={styles.cardLine}><strong>Fecha:</strong> {fmtFecha(t.fecha_realizacion)}</p>
+                </div>
+              )
+            })}
           </div>
         </div>
       )}
@@ -303,7 +334,7 @@ const styles: { [k: string]: React.CSSProperties } = {
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: '12px 14px',
-    border: '1px solid #e2e8f0',
+    border: '1px solid e2e8f0',
   },
   filtersRow: { display: 'grid', gap: 10 },
   chipsRow: { display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' },
@@ -315,8 +346,14 @@ const styles: { [k: string]: React.CSSProperties } = {
     color: '#2563EB',
     fontWeight: 700,
     cursor: 'pointer',
+    transition: 'all .15s ease',
   },
-  chipActive: { background: '#2563EB', color: '#fff' },
+  chipActive: {
+    background: '#2563EB',
+    color: '#fff',
+    transform: 'translateY(-1px)',
+    boxShadow: '0 6px 12px rgba(37,99,235,0.15)',
+  },
   inputsRow: { display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' },
   inputSm: {
     minWidth: 160,
@@ -326,13 +363,38 @@ const styles: { [k: string]: React.CSSProperties } = {
     fontSize: 14,
     flex: '0 1 220px',
   },
+
   actionsRow: { display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' },
   dateGroup: { display: 'flex', gap: 6, alignItems: 'center' },
   inputLabel: { fontSize: 13, color: '#334155' },
   inputDate: { padding: '6px 8px', borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 14 },
-  applyRow: { display: 'flex', gap: 8 },
 
-  // 👉 Grilla multi-columna (no apilado), centrada
+  applyRow: { display: 'flex', gap: 8 },
+  btnPrimary: {
+    padding: '10px 16px',
+    borderRadius: 10,
+    border: 'none',
+    cursor: 'pointer',
+    fontWeight: 700,
+    color: '#fff',
+    background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)',
+    boxShadow: '0 6px 14px rgba(37,99,235,0.25)',
+    transition: 'transform .12s ease, box-shadow .12s ease, filter .12s ease',
+  },
+  btnLight: {
+    padding: '10px 16px',
+    borderRadius: 10,
+    border: '1px solid #CBD5E1',
+    cursor: 'pointer',
+    fontWeight: 700,
+    color: '#0f172a',
+    background: '#fff',
+    boxShadow: '0 2px 6px rgba(15,23,42,0.06)',
+    transition: 'transform .12s ease, box-shadow .12s ease, filter .12s ease',
+  },
+
+  // Hover/active (aplican inline en eventos si quisieras, acá dejamos estilos estáticos)
+  // 👉 Grilla
   cardsWrapper: { width: 'min(1100px, 100%)' },
   cardsGrid: {
     display: 'grid',
@@ -352,8 +414,32 @@ const styles: { [k: string]: React.CSSProperties } = {
     display: 'grid',
     gap: 6,
   },
+  cardHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
   cardTitle: { margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#0f172a' },
   cardLine: { margin: 0, fontSize: 14, color: '#334155' },
+
+  badge: {
+    padding: '4px 10px',
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 800,
+    letterSpacing: .3,
+  },
+  badgeOk: {
+    background: '#dcfce7',
+    color: '#166534',
+    border: '1px solid #86efac',
+  },
+  badgePending: {
+    background: '#fee2e2',
+    color: '#991b1b',
+    border: '1px solid #fecaca',
+  },
 
   centerText: { textAlign: 'center', color: '#334155' },
 }

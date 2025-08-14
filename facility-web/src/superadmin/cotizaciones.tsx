@@ -1,5 +1,5 @@
-// src/superadmin/cotizaciones.tsx
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 type Estado = 'cotizado' | 'aprobado' | 'cerrado' | 'facturado' | 'desestimado'
@@ -23,22 +23,23 @@ type Cotizacion = {
   archivo_mimetype: string | null
   creado_en: string
   subida_por: string
-  usuarios?: Usuario | null // join
+  usuarios?: Usuario | null
 }
 
 export default function CotizacionesSuperadmin() {
+  const navigate = useNavigate()
+
   const [cargando, setCargando] = useState(false)
   const [listado, setListado] = useState<Cotizacion[]>([])
 
   // filtros
-  const [qId, setQId] = useState('')          // N° o UUID
+  const [qId, setQId] = useState('')
   const [fmId, setFmId] = useState<string>('')
   const [clienteQ, setClienteQ] = useState('')
   const [estado, setEstado] = useState<Estado | ''>('')
   const [desde, setDesde] = useState('')
   const [hasta, setHasta] = useState('')
 
-  // FMs para el dropdown
   const [fms, setFms] = useState<Usuario[]>([])
 
   const estados: Estado[] = useMemo(
@@ -46,7 +47,6 @@ export default function CotizacionesSuperadmin() {
     []
   )
 
-  // Helpers filtro ID/N°
   const isUUID = (s: string) =>
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s.trim())
   const parseNumero = (s: string) => {
@@ -82,7 +82,6 @@ export default function CotizacionesSuperadmin() {
       `)
       .order('numero', { ascending: false })
 
-    // Filtro por N°/UUID
     if (qId.trim()) {
       if (isUUID(qId)) {
         q = q.eq('id', qId.trim())
@@ -92,7 +91,6 @@ export default function CotizacionesSuperadmin() {
       }
     }
 
-    // Otros filtros
     if (fmId) q = q.eq('subida_por', fmId)
     if (clienteQ) q = q.ilike('cliente', `%${clienteQ}%`)
     if (estado) q = q.eq('estado', estado)
@@ -118,7 +116,7 @@ export default function CotizacionesSuperadmin() {
     const { error } = await supabase.from('cotizaciones').update({ estado: nuevo }).eq('id', id)
     if (error) {
       alert('No se pudo actualizar el estado: ' + error.message)
-      setListado(prev) // rollback visual
+      setListado(prev)
     }
   }
 
@@ -131,7 +129,13 @@ export default function CotizacionesSuperadmin() {
 
   return (
     <div style={styles.wrap}>
-      <h2 style={styles.title}>Gestionar Cotizaciones (Superadmin)</h2>
+      {/* Botón volver y título */}
+      <div style={styles.headerRow}>
+        <button onClick={() => navigate('/superadmin')} style={styles.btnBack}>
+          ← Volver
+        </button>
+        <h2 style={styles.title}>Gestionar Cotizaciones (Superadmin)</h2>
+      </div>
 
       {/* Filtros */}
       <div style={styles.filtros}>
@@ -232,7 +236,18 @@ export default function CotizacionesSuperadmin() {
 
 const styles: { [k: string]: React.CSSProperties } = {
   wrap: { maxWidth: 1100, margin: '0 auto', padding: 20, fontFamily: `'Segoe UI', sans-serif` },
-  title: { margin: '0 0 12px', color: '#0f172a' },
+  headerRow: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 },
+  btnBack: {
+    backgroundColor: '#6b7280',
+    color: '#fff',
+    border: 'none',
+    padding: '10px 16px',
+    borderRadius: 8,
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  title: { margin: 0, color: '#0f172a', fontSize: '1.4rem', fontWeight: 700 },
   filtros: {
     display: 'grid',
     gridTemplateColumns: '1fr 240px 1fr 200px 160px 160px 160px',
