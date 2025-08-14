@@ -6,7 +6,7 @@ import { supabase } from '../lib/supabase'
 type Llegada = {
   id: string
   lugar: string | null
-  fecha: string            // DATE o TIMESTAMP en la DB
+  fecha: string
   hora: string | null
   latitud: number | null
   longitud: number | null
@@ -48,20 +48,10 @@ export default function Llegadas() {
           )
         `)
 
-      // filtros server‑side
-      if (fecha) {
-        // si `fecha` es DATE esto matchea exacto; si es TIMESTAMP y querés rango del día
-        // podrías cambiar a gte/lte con start/end del día.
-        query = query.eq('fecha', fecha)
-      }
-      if (lugar.trim()) {
-        query = query.ilike('lugar', `%${lugar.trim()}%`)
-      }
+      if (fecha) query = query.eq('fecha', fecha)
+      if (lugar.trim()) query = query.ilike('lugar', `%${lugar.trim()}%`)
 
-      // ordenar más reciente -> más viejo
-      query = query
-        .order('fecha', { ascending: false })
-        .order('hora', { ascending: false })
+      query = query.order('fecha', { ascending: false }).order('hora', { ascending: false })
 
       const { data, error } = await query
       if (error) throw error
@@ -81,6 +71,9 @@ export default function Llegadas() {
     window.open(url, '_blank')
   }
 
+  const mapEmbedUrl = (lat: number, lng: number, zoom = 15) =>
+    `https://maps.google.com/maps?q=${lat},${lng}&z=${zoom}&output=embed`
+
   // filtro por nombre/apellido (client‑side)
   const llegadasFiltradas = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
@@ -88,11 +81,7 @@ export default function Llegadas() {
     return llegadas.filter(l => {
       const nombre = l.usuarios?.nombre?.toLowerCase() || ''
       const apellido = l.usuarios?.apellido?.toLowerCase() || ''
-      return (
-        nombre.includes(q) ||
-        apellido.includes(q) ||
-        `${nombre} ${apellido}`.includes(q)
-      )
+      return nombre.includes(q) || apellido.includes(q) || `${nombre} ${apellido}`.includes(q)
     })
   }, [llegadas, busqueda])
 
@@ -193,29 +182,33 @@ export default function Llegadas() {
                       📍 <strong>Lugar:</strong> {llegada.lugar || '—'}
                     </p>
                     {(llegada.latitud != null && llegada.longitud != null) && (
-                      <p style={styles.texto}>
-                        📌 <strong>Coordenadas:</strong>{' '}
-                        {Number(llegada.latitud).toFixed(5)}, {Number(llegada.longitud).toFixed(5)}
-                      </p>
+                      <>
+                        <p style={styles.texto}>
+                          📌 <strong>Coordenadas:</strong>{' '}
+                          {Number(llegada.latitud).toFixed(5)}, {Number(llegada.longitud).toFixed(5)}
+                        </p>
+
+                        {/* mini‑mapa embebido, clickeable */}
+                        <div
+                          style={styles.mapBox}
+                          role="button"
+                          aria-label="Abrir en Google Maps"
+                          onClick={() => abrirMapa(llegada.latitud, llegada.longitud)}
+                          onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && abrirMapa(llegada.latitud, llegada.longitud)}
+                          tabIndex={0}
+                        >
+                          <iframe
+                            title={`mapa-${llegada.id}`}
+                            src={mapEmbedUrl(llegada.latitud, llegada.longitud, 15)}
+                            style={styles.mapIframe as any}
+                            loading="lazy"
+                            referrerPolicy="no-referrer-when-downgrade"
+                          />
+                          <div style={styles.mapHint}>Click para abrir en Google Maps</div>
+                        </div>
+                      </>
                     )}
                   </div>
-
-                  {(llegada.latitud != null && llegada.longitud != null) && (
-                    <button
-                      onClick={() => abrirMapa(llegada.latitud, llegada.longitud)}
-                      style={styles.botonMapa}
-                      onMouseOver={(e) => {
-                        e.currentTarget.style.backgroundColor = '#1d4ed8'
-                        e.currentTarget.style.transform = 'translateY(-1px)'
-                      }}
-                      onMouseOut={(e) => {
-                        e.currentTarget.style.backgroundColor = '#1e40af'
-                        e.currentTarget.style.transform = 'translateY(0)'
-                      }}
-                    >
-                      🗺️ Ver en Google Maps
-                    </button>
-                  )}
                 </div>
               ))}
             </div>
@@ -332,6 +325,35 @@ const styles: { [key: string]: React.CSSProperties } = {
   fechaBadge: { fontSize: '0.95rem', color: '#64748b', fontWeight: 600 },
   llegadaInfo: { marginBottom: '1rem' },
   texto: { fontSize: '1rem', color: '#374151', marginBottom: '0.5rem', lineHeight: 1.5 },
+
+  // mini‑mapa
+  mapBox: {
+    position: 'relative',
+    width: '100%',
+    height: 180,
+    borderRadius: 12,
+    overflow: 'hidden',
+    border: '1px solid #e2e8f0',
+    cursor: 'pointer',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.07)',
+  },
+  mapIframe: {
+    border: '0',
+    width: '100%',
+    height: '100%',
+    display: 'block',
+  },
+  mapHint: {
+    position: 'absolute',
+    right: 8,
+    bottom: 8,
+    padding: '4px 8px',
+    background: 'rgba(30,58,138,0.9)',
+    color: '#fff',
+    borderRadius: 8,
+    fontSize: 12,
+    fontWeight: 700,
+  },
 
   botonMapa: {
     backgroundColor: '#1e40af',

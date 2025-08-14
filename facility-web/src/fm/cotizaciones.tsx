@@ -1,5 +1,6 @@
 // src/fm/cotizaciones.tsx
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 type Estado = 'cotizado' | 'aprobado' | 'cerrado' | 'facturado' | 'desestimado'
@@ -18,6 +19,8 @@ type Cotizacion = {
 }
 
 export default function CotizacionesFM() {
+  const navigate = useNavigate()
+
   const [meId, setMeId] = useState<string | null>(null)
   const [cargando, setCargando] = useState(false)
   const [listado, setListado] = useState<Cotizacion[]>([])
@@ -178,7 +181,13 @@ export default function CotizacionesFM() {
 
   return (
     <div style={styles.wrap}>
-      <h2 style={styles.title}>Cotizaciones (FM)</h2>
+      {/* Header con botón Volver */}
+      <div style={styles.headerRow}>
+        <button onClick={() => navigate('/fm')} style={styles.btnBack}>
+          ← Volver
+        </button>
+        <h2 style={styles.title}>Cotizaciones (FM)</h2>
+      </div>
 
       {/* Form de alta */}
       <form onSubmit={subirCotizacion} style={styles.form}>
@@ -311,7 +320,25 @@ export default function CotizacionesFM() {
 
 const styles: { [k: string]: React.CSSProperties } = {
   wrap: { maxWidth: 1000, margin: '0 auto', padding: 20, fontFamily: `'Segoe UI', sans-serif` },
-  title: { margin: '0 0 12px', color: '#0f172a' },
+
+  headerRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  btnBack: {
+    backgroundColor: '#6b7280',
+    color: '#fff',
+    border: 'none',
+    padding: '10px 16px',
+    borderRadius: 8,
+    fontSize: 14,
+    fontWeight: 600,
+    cursor: 'pointer',
+  },
+  title: { margin: 0, color: '#0f172a' },
+
   form: { border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, marginBottom: 16, background: '#fff' },
   row: { display: 'grid', gridTemplateColumns: '160px 1fr', alignItems: 'center', gap: 12, marginBottom: 10 },
   row3: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 10 },

@@ -129,6 +129,9 @@ export default function Llegadas() {
     window.open(url, '_blank')
   }
 
+  const mapEmbedUrl = (lat: number, lng: number, zoom = 15) =>
+    `https://maps.google.com/maps?q=${lat},${lng}&z=${zoom}&output=embed`
+
   if (loading) {
     return (
       <div style={styles.wrapper}>
@@ -242,24 +245,31 @@ export default function Llegadas() {
                       🕒 <strong>Hora:</strong> {l.hora}
                     </p>
                     <p style={styles.texto}>
-                      📍 <strong>Coordenadas:</strong> {l.latitud.toFixed(5)}, {l.longitud.toFixed(5)}
+                      📌 <strong>Coordenadas:</strong> {l.latitud.toFixed(5)}, {l.longitud.toFixed(5)}
                     </p>
-                  </div>
 
-                  <button
-                    onClick={() => abrirMapa(l.latitud, l.longitud)}
-                    style={styles.botonMapa}
-                    onMouseOver={(e) => {
-                      e.currentTarget.style.backgroundColor = '#1d4ed8'
-                      e.currentTarget.style.transform = 'translateY(-1px)'
-                    }}
-                    onMouseOut={(e) => {
-                      e.currentTarget.style.backgroundColor = '#1e40af'
-                      e.currentTarget.style.transform = 'translateY(0)'
-                    }}
-                  >
-                    🗺️ Ver en Google Maps
-                  </button>
+                    {/* mini-mapa embebido y clickeable */}
+                    {l.latitud != null && l.longitud != null && (
+                      <div
+                        style={styles.mapBox}
+                        role="button"
+                        aria-label="Abrir en Google Maps"
+                        onClick={() => abrirMapa(l.latitud, l.longitud)}
+                        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && abrirMapa(l.latitud, l.longitud)}
+                        tabIndex={0}
+                        title="Abrir en Google Maps"
+                      >
+                        <iframe
+                          title={`mapa-${l.id}`}
+                          src={mapEmbedUrl(l.latitud, l.longitud, 15)}
+                          style={styles.mapIframe as any}
+                          loading="lazy"
+                          referrerPolicy="no-referrer-when-downgrade"
+                        />
+                        <div style={styles.mapHint}>Click para abrir en Google Maps</div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -300,30 +310,35 @@ const styles: { [key: string]: React.CSSProperties } = {
   llegadaInfo: { marginBottom: '1rem' },
   texto: { fontSize: '1rem', color: '#374151', marginBottom: '0.5rem', lineHeight: '1.5' },
 
-  botonMapa: {
-    backgroundColor: '#1e40af',
-    color: 'white',
-    border: 'none',
-    padding: '12px 20px',
-    borderRadius: '8px',
-    fontSize: '14px',
-    fontWeight: '600',
+  // mini-mapa
+  mapBox: {
+    position: 'relative',
+    width: '100%',
+    height: 180,
+    borderRadius: 12,
+    overflow: 'hidden',
+    border: '1px solid #e2e8f0',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+    boxShadow: '0 2px 6px rgba(0,0,0,0.07)',
   },
-  boton: {
-    backgroundColor: '#1e40af',
-    color: 'white',
-    border: 'none',
-    padding: '16px 24px',
-    borderRadius: '12px',
-    fontSize: '16px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+  mapIframe: {
+    border: '0',
+    width: '100%',
+    height: '100%',
+    display: 'block',
   },
+  mapHint: {
+    position: 'absolute',
+    right: 8,
+    bottom: 8,
+    padding: '4px 8px',
+    background: 'rgba(30,58,138,0.9)',
+    color: '#fff',
+    borderRadius: 8,
+    fontSize: 12,
+    fontWeight: 700,
+  },
+
   headerContainer: { display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '2rem' },
   botonVolver: {
     backgroundColor: '#6b7280',
