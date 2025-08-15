@@ -59,7 +59,7 @@ export default function ListaTecnicos() {
         >
           ← Volver
         </button>
-        <h2 style={{ ...styles.titulo, margin: 0, flex: 1 }}>técnicos de mantenimiento</h2>
+        <h2 style={{ ...styles.titulo, margin: 0, flex: 1 }}>Técnicos de mantenimiento</h2>
       </div>
 
       <input

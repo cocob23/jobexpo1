@@ -64,13 +64,11 @@ export default function Llegadas() {
         `)
         .order('fecha', { ascending: false })
 
-      // Buscar por empleado (nombre o apellido) -> resolvemos IDs primero
       if (nombre) {
         const { data: us, error: uerr } = await supabase
           .from('usuarios')
           .select('id')
           .or(`nombre.ilike.%${nombre}%,apellido.ilike.%${nombre}%`)
-
         if (uerr) throw uerr
         const ids = (us || []).map((u) => u.id)
         if (ids.length === 0) {
@@ -81,12 +79,8 @@ export default function Llegadas() {
         query = query.in('usuario_id', ids)
       }
 
-      // Buscar por lugar
-      if (lugar) {
-        query = query.ilike('lugar', `%${lugar}%`)
-      }
+      if (lugar) query = query.ilike('lugar', `%${lugar}%`)
 
-      // Rango de fechas (columna fecha)
       const desdeISO = toISOStart(desde)
       const hastaISO = toISOEnd(hasta)
       if (desdeISO) query = query.gte('fecha', desdeISO)
@@ -135,9 +129,6 @@ export default function Llegadas() {
   if (loading) {
     return (
       <div style={styles.wrapper}>
-        <div style={styles.logoTopContainer}>
-          <img src="/logo.png" alt="Facility Argentina" style={styles.logoTop} />
-        </div>
         <div style={styles.container}>
           <p>Cargando llegadas...</p>
         </div>
@@ -148,9 +139,6 @@ export default function Llegadas() {
   if (error) {
     return (
       <div style={styles.wrapper}>
-        <div style={styles.logoTopContainer}>
-          <img src="/logo.png" alt="Facility Argentina" style={styles.logoTop} />
-        </div>
         <div style={styles.container}>
           <p style={{ color: 'red' }}>{error}</p>
           <button onClick={() => aplicarFiltros()} style={styles.boton}>
@@ -163,10 +151,6 @@ export default function Llegadas() {
 
   return (
     <div style={styles.wrapper}>
-      <div style={styles.logoTopContainer}>
-        <img src="/logo.png" alt="Facility Argentina" style={styles.logoTop} />
-      </div>
-
       <div style={styles.container}>
         <div style={styles.headerContainer}>
           <button onClick={() => navigate('/superadmin')} style={styles.botonVolver}>
@@ -282,8 +266,6 @@ export default function Llegadas() {
 
 const styles: { [key: string]: React.CSSProperties } = {
   wrapper: { minHeight: '100vh', backgroundColor: '#f8fafc' },
-  logoTopContainer: { display: 'flex', justifyContent: 'center', paddingTop: 30, paddingBottom: 10 },
-  logoTop: { height: 80, objectFit: 'contain' },
   container: { maxWidth: '1000px', margin: '0 auto', padding: '2rem', fontFamily: `'Segoe UI', sans-serif` },
   titulo: { fontSize: '2.2rem', fontWeight: 700, marginBottom: '0', color: '#1e293b', textAlign: 'center', flex: 1 },
   contenido: { backgroundColor: 'white', borderRadius: '16px', padding: '2rem', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)' },
