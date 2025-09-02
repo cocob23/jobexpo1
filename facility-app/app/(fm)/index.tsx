@@ -1,93 +1,101 @@
 // app/(fm)/index.tsx
-
 import { useRouter } from 'expo-router'
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
+import { Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
 export default function IndexFM() {
   const router = useRouter()
 
+  // Acciones rápidas (1 botón por funcionalidad)
+  const acciones: { label: string; icon: keyof typeof Ionicons.glyphMap; path: string }[] = [
+    { label: 'Asignar Tarea',        icon: 'add-circle-outline',    path: '/(fm)/asignar-tarea' },
+    { label: 'Ver Tareas',           icon: 'checkbox-outline',      path: '/(fm)/ver-tareas' },
+    { label: 'Aprobar Trabajos',     icon: 'checkmark-done-outline',path: '/(fm)/aprobar-trabajos' },
+    { label: 'Agregar Técnico',      icon: 'person-add-outline',    path: '/crear-tecnico' }, // según tu ruta actual
+    { label: 'Cotizaciones',         icon: 'calculator-outline',    path: '/(fm)/cotizaciones' },
+    { label: 'Técnicos',             icon: 'construct-outline',     path: '/(fm)/tecnicos' },
+    { label: 'Llegadas',             icon: 'time-outline',          path: '/(fm)/llegadas' },
+    { label: 'Perfil',               icon: 'person-circle-outline', path: '/(fm)/perfil' },
+  ]
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.titulo}>Panel Facility Manager</Text>
+    <SafeAreaView style={styles.safe}>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <Image source={require('@/assets/images/logo.png')} style={styles.logo} />
+        <Text style={styles.titulo}>Panel de Facility Manager</Text>
 
-      <TouchableOpacity
-        style={styles.boton}
-        onPress={() => router.push('/(fm)/asignar-tarea')}
-      >
-        <Text style={styles.textoBoton}>Asignar tarea</Text>
-      </TouchableOpacity>
+        {/* Botón principal (elige el que más uses; acá priorizo Ver Tareas) */}
+        <TouchableOpacity
+          style={styles.botonGrande}
+          onPress={() => router.push('/(fm)/ver-tareas')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.textoBoton}>📋 Ver Tareas Asignadas</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity
-        style={styles.boton}
-        onPress={() => router.push('/(fm)/ver-tareas')}
-      >
-        <Text style={styles.textoBoton}>Ver tareas asignadas</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.boton}
-        onPress={() => router.push('/(fm)/aprobar-trabajos')}
-      >
-        <Text style={styles.textoBoton}>Aprobar trabajos</Text>
-      </TouchableOpacity>
-      
-      <TouchableOpacity
-        style={styles.boton}
-        onPress={() => router.push('/crear-tecnico')}
-      >
-        <Text style={styles.textoBoton}>Agregar técnico</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        style={styles.boton}
-        onPress={() => router.push('/(fm)/cotizaciones')}
-      >
-        <Text style={styles.textoBoton}>Cotizaciones</Text>
-      </TouchableOpacity>
-
-      {/* para FM Admin */}
-      <TouchableOpacity
-        style={styles.botonSecundario}
-        onPress={() => router.push('/(fm)/asignar-a-fm')}
-      >
-        <Text style={styles.textoBotonSecundario}>Asignar tareas a FM</Text>
-      </TouchableOpacity>
-    </View>
+        {/* Accesos rápidos */}
+        <View style={styles.grid}>
+          {acciones.map((a) => (
+            <TouchableOpacity
+              key={a.label}
+              style={styles.item}
+              onPress={() => router.push(a.path)}
+              activeOpacity={0.85}
+            >
+              <Ionicons name={a.icon} size={22} color="#2563EB" />
+              <Text style={styles.itemText}>{a.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 24,
+  safe: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { padding: 24, alignItems: 'center', gap: 14 },
+  logo: { width: 180, height: 60, resizeMode: 'contain', marginTop: 8 },
+  titulo: { fontSize: 20, fontWeight: '700', color: '#0F172A', marginBottom: 4 },
+  botonGrande: {
+    backgroundColor: '#2563EB',
+    paddingVertical: 20,
+    paddingHorizontal: 36,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 6,
+    marginTop: 6,
+    marginBottom: 10,
+  },
+  textoBoton: { color: '#fff', fontSize: 18, fontWeight: '700', letterSpacing: 0.5 },
+
+  grid: {
+    width: '100%',
+    gap: 12,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingTop: 6,
+    paddingBottom: 20,
+  },
+  item: {
+    width: '48%',
     backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'flex-start',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  titulo: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 30,
-  },
-  boton: {
-    backgroundColor: '#1e40af',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  textoBoton: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-    textAlign: 'center',
-  },
-  botonSecundario: {
-    backgroundColor: '#64748b',
-    padding: 14,
-    borderRadius: 12,
-    marginTop: 30,
-  },
-  textoBotonSecundario: {
-    color: '#fff',
-    fontSize: 14,
-    textAlign: 'center',
-  },
+  itemText: { fontWeight: '600', color: '#0F172A' },
 })

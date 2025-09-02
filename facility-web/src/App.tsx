@@ -17,6 +17,8 @@ import DetalleTareaFM from './fm/detalle-tarea-fm'
 import LlegadasFM from './fm/llegadas'
 import TicketsFM from './fm/tickets'
 import CotizacionesFM from './fm/cotizaciones'
+import CrearEmpresaFM from './fm/crear-empresa'
+
 
 // Superadmin
 import SuperadminLayout from './superadmin/SuperadminLayout'
@@ -31,6 +33,8 @@ import VerTareasSA from './superadmin/ver-tareas'
 import LlegadasSA from './superadmin/llegadas'
 import CotizacionesSuperadmin from './superadmin/cotizaciones'
 import DetalleTareaSA from './superadmin/detalle-tarea' // ⬅️ agregado
+import CrearEmpresaSA from './superadmin/crear-empresa'
+
 
 // Mantenimiento Externo
 import TecnicosExternosLayout from './mantenimiento-externo/TecnicosExternosLayout'
@@ -68,6 +72,8 @@ export default function App() {
           <Route path="perfil-tecnico/:id" element={<PerfilTecnicoSA />} />
           <Route path="llegadas" element={<LlegadasSA />} />
           <Route path="cotizaciones" element={<CotizacionesSuperadmin />} />
+          <Route path="empresas/nueva" element={<CrearEmpresaSA />} />   {/* ⬅️ NUEVA */}
+
         </Route>
 
         {/* RUTAS FM */}
@@ -90,6 +96,8 @@ export default function App() {
           <Route path="llegadas" element={<LlegadasFM />} />
           <Route path="tickets" element={<TicketsFM />} />
           <Route path="cotizaciones" element={<CotizacionesFM />} />
+          <Route path="empresas/nueva" element={<CrearEmpresaFM />} />   {/* ⬅️ NUEVA */}
+
         </Route>
 
         {/* RUTAS MANTENIMIENTO EXTERNO (con navbar/layout) */}

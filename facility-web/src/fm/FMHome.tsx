@@ -9,7 +9,8 @@ import {
   FaUsersCog,
   FaClipboardList,
   FaFileInvoiceDollar,
-  FaMapMarkerAlt
+  FaMapMarkerAlt,
+  FaBuilding, // ⬅️ agregado
 } from 'react-icons/fa'
 
 export default function FMHome() {
@@ -44,6 +45,12 @@ export default function FMHome() {
             <span>Asignar Tarea</span>
           </button>
 
+          {/* ⬇️ NUEVA CARD: Crear empresa/cliente */}
+          <button style={styles.card} onClick={() => navigate('/fm/empresas/nueva')}>
+            <FaBuilding size={32} />
+            <span>Crear empresa/cliente</span>
+          </button>
+
           <button style={styles.card} onClick={() => navigate('/fm/tecnicos')}>
             <FaUsersCog size={32} />
             <span>Lista de Técnicos</span>
@@ -53,8 +60,6 @@ export default function FMHome() {
             <FaUserPlus size={32} />
             <span>Crear Técnico</span>
           </button>
-
-
 
           <button style={styles.card} onClick={() => navigate('/fm/tickets')}>
             <FaTicketAlt size={32} />

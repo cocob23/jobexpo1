@@ -181,7 +181,7 @@ export default function LlegadasFM() {
 
         {/* Buscar por nombre (client-side) */}
         <View style={styles.inputWrapFull}>
-          <Text style={styles.label}>Buscar empleada</Text>
+          <Text style={styles.label}>Buscar empleado</Text>
           <TextInput
             value={buscar}
             onChangeText={setBuscar}

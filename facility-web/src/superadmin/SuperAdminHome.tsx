@@ -9,7 +9,8 @@ import {
   FaUsersCog,
   FaClipboardList,
   FaMapMarkerAlt,
-  FaCalculator
+  FaCalculator,
+  FaBuilding, // ⬅️ agregado
 } from 'react-icons/fa'
 
 export default function SuperadminIndex() {
@@ -49,6 +50,12 @@ export default function SuperadminIndex() {
             <span>Asignar Tarea</span>
           </button>
 
+          {/* ⬇️ NUEVA CARD: Crear empresa/cliente */}
+          <button style={styles.card} onClick={() => navigate('/superadmin/empresas/nueva')}>
+            <FaBuilding size={32} />
+            <span>Crear empresa/cliente</span>
+          </button>
+
           <button style={styles.card} onClick={() => navigate('/superadmin/ver-tareas')}>
             <FaTasks size={32} />
             <span>Ver Tareas</span>
@@ -58,7 +65,6 @@ export default function SuperadminIndex() {
             <FaTicketAlt size={32} />
             <span>Ver Tickets</span>
           </button>
-
 
           <button style={styles.card} onClick={() => navigate('/superadmin/tecnicos')}>
             <FaUserTie size={32} />
@@ -136,4 +142,4 @@ const styles: { [key: string]: React.CSSProperties } = {
     justifyContent: 'center',
     textAlign: 'center',
   },
-} 
+}
