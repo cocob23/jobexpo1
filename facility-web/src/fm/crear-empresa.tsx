@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
@@ -12,7 +12,6 @@ type Form = {
   provincia: string
 }
 
-// Estado inicial
 const initial: Form = {
   nombre: '',
   cuit: '',
@@ -53,6 +52,7 @@ export default function CrearEmpresa() {
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const nombreRef = useRef<HTMLInputElement>(null)
 
   const onChange = (k: keyof Form, v: string) => {
     setF(prev => ({ ...prev, [k]: v }))
@@ -62,25 +62,22 @@ export default function CrearEmpresa() {
 
   // Chequea si un slug existe (para resolver colisiones silenciosamente)
   async function slugExiste(slug: string) {
-    const { data, error } = await supabase
+    const { error, count } = await supabase
       .from('empresas')
       .select('id', { head: true, count: 'exact' })
       .eq('slug', slug)
     if (error) return false
-    // cuando head: true, data suele venir null; usamos count en el error/metadata, pero por compat:
-    // si hay error no contamos; si hay data array vacía, no existe; si llega algo, existe.
-    return Array.isArray(data) && data.length > 0
+    return (count ?? 0) > 0
   }
 
-  async function generarSlugUnico(baseNombre: string) {
-    const base = toSlug(baseNombre) || 'empresa'
-    let slug = base
-    // si existe, agrego sufijo -2, -3, ...
+  async function generarSlugUnico(nombre: string) {
+    const baseSlug = toSlug(nombre) || 'empresa'
+    let candidate = baseSlug
     for (let i = 2; i < 100; i++) {
-      if (!(await slugExiste(slug))) return slug
-      slug = `${base}-${i}`
+      if (!(await slugExiste(candidate))) return candidate
+      candidate = `${baseSlug}-${i}`
     }
-    return `${base}-${Date.now()}`
+    return `${baseSlug}-${Date.now()}`
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -121,16 +118,15 @@ export default function CrearEmpresa() {
     setLoading(false)
 
     if (error) {
-      if (error.code === '42501') {
-        setErr('No tenés permisos para crear empresas (RLS).')
-      } else {
-        setErr(error.message || 'Error al crear la empresa.')
-      }
+      if (error.code === '42501') setErr('No tenés permisos para crear empresas (RLS).')
+      else setErr(error.message || 'Error al crear la empresa.')
       return
     }
 
+    // Éxito: mostrar mensaje, limpiar formulario y dejar foco en "Nombre".
     setMsg(`Empresa creada: ${data?.nombre}`)
-    setTimeout(() => navigate('/fm/empresas'), 800)
+    setF(initial)
+    setTimeout(() => nombreRef.current?.focus(), 0)
   }
 
   return (
@@ -149,12 +145,14 @@ export default function CrearEmpresa() {
           <div style={styles.row}>
             <label style={styles.label}>Nombre *</label>
             <input
+              ref={nombreRef}
               style={styles.input}
               value={f.nombre}
               onChange={e => onChange('nombre', e.target.value)}
               placeholder="Cliente Demo S.A."
               onFocus={focusOn}
               onBlur={blurOn}
+              autoFocus
             />
           </div>
 
@@ -248,7 +246,7 @@ export default function CrearEmpresa() {
   )
 }
 
-/** Focus helpers para inputs (igual a otras pantallas) */
+/** Focus helpers */
 function focusOn(e: React.FocusEvent<HTMLInputElement>) {
   e.currentTarget.style.borderColor = '#1e40af'
   e.currentTarget.style.boxShadow = '0 0 0 3px rgba(30, 64, 175, 0.10)'
@@ -372,7 +370,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
 }
 
-// Responsive: colapsar a 1 columna
+// Responsive
 ;(function applyResponsive() {
   if (typeof window === 'undefined') return
   const mql = window.matchMedia('(max-width: 768px)')
