@@ -345,8 +345,8 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 22,
+    fontWeight: 'bold',
     color: '#0f172a',
   },
   sub: { marginTop: 4, color: '#475569', marginBottom: 10 },

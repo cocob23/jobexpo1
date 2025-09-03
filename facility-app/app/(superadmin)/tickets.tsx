@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     backgroundColor: '#fff',
   },
-  titulo: { fontSize: 24, fontWeight: 'bold', marginBottom: 16 },
+  titulo: { fontSize: 22, fontWeight: 'bold', marginBottom: 16 },
 
   card: {
     borderWidth: 1,

@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   btnBackText: { color: '#fff', fontWeight: '700', marginLeft: 4 },
-  title: { fontSize: 20, fontWeight: '800', color: '#0F172A', marginBottom: 12 },
+  title: { fontSize: 22, fontWeight: 'bold', color: '#0F172A', marginBottom: 12 },
 
   alert: {
     borderRadius: 12,

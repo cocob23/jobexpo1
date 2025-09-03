@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
   btnBackText: { color: '#fff', fontWeight: '700', marginLeft: 4 },
 
   wrap: { flex: 1, paddingHorizontal: 16, backgroundColor: '#f1f5f9' },
-  title: { fontSize: 18, fontWeight: '700', color: '#0f172a', marginBottom: 12 },
+  title: { fontSize: 22, fontWeight: 'bold', color: '#0f172a', marginBottom: 12 },
 
   filtros: { gap: 8, marginBottom: 12 },
   input: {

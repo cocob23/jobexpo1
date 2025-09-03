@@ -1,15 +1,15 @@
 // app/(fm)/llegadas.tsx
 import { useEffect, useMemo, useState } from 'react'
 import {
-  View, Text, FlatList, StyleSheet, RefreshControl,
-  TouchableOpacity, ActivityIndicator, TextInput, Platform
+  View, Text, FlatList, StyleSheet, RefreshControl, TextInput,
+  TouchableOpacity, ActivityIndicator, Platform, Linking, ScrollView
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
-import { Ionicons } from '@expo/vector-icons'
-import { useRouter } from 'expo-router'
 import DateTimePicker from '@react-native-community/datetimepicker'
+import MapView, { Marker } from 'react-native-maps'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
+import { Ionicons } from '@expo/vector-icons'
+import { useRouter } from 'expo-router'
 import { supabase } from '@/constants/supabase'
 
 dayjs.locale('es')
@@ -25,6 +25,7 @@ type Llegada = {
 }
 
 type Usuario = { id: string; nombre: string; apellido: string }
+type Empresa = { id: string; nombre: string }
 
 export default function LlegadasFM() {
   const router = useRouter()
@@ -34,22 +35,33 @@ export default function LlegadasFM() {
   const [refreshing, setRefreshing] = useState(false)
 
   // filtros
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null) // null = sin filtro
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [showPicker, setShowPicker] = useState(false)
   const [lugar, setLugar] = useState<string>('')
   const [buscar, setBuscar] = useState<string>('')
 
+  // empresas para autocompletar (filtro "Lugar")
+  const [empresas, setEmpresas] = useState<Empresa[]>([])
+  const [sugerencias, setSugerencias] = useState<Empresa[]>([])
+
+  useEffect(() => {
+    ;(async () => {
+      const { data, error } = await supabase
+        .from('empresas')
+        .select('id, nombre')
+        .order('nombre', { ascending: true })
+      if (!error && data) setEmpresas(data as Empresa[])
+    })()
+  }, [])
+
   useEffect(() => {
     fetchLlegadas()
-
-    // realtime
     const ch = supabase
       .channel('llegadas-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'llegadas' }, () => {
         fetchLlegadas(false)
       })
       .subscribe()
-
     return () => { supabase.removeChannel(ch) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate, lugar])
@@ -57,7 +69,6 @@ export default function LlegadasFM() {
   const fetchLlegadas = async (showSpinner = true) => {
     try {
       if (showSpinner) setLoading(true)
-
       let query = supabase
         .from('llegadas')
         .select('id, usuario_id, fecha, hora, lugar, latitud, longitud')
@@ -66,14 +77,9 @@ export default function LlegadasFM() {
         const dateStr = dayjs(selectedDate).format('YYYY-MM-DD')
         query = query.eq('fecha', dateStr)
       }
+      if (lugar.trim()) query = query.ilike('lugar', `%${lugar.trim()}%`)
 
-      if (lugar.trim()) {
-        query = query.ilike('lugar', `%${lugar.trim()}%`)
-      }
-
-      query = query
-        .order('fecha', { ascending: false })
-        .order('hora', { ascending: false })
+      query = query.order('fecha', { ascending: false }).order('hora', { ascending: false })
 
       const { data, error } = await query
       if (error) throw error
@@ -89,7 +95,7 @@ export default function LlegadasFM() {
           .in('id', ids)
         if (uerr) throw uerr
         const map: Record<string, Usuario> = {}
-        ;(usrs || []).forEach(u => { map[u.id] = u as Usuario })
+        ;(usrs || []).forEach((u: any) => { map[u.id] = u as Usuario })
         setEmpleadasMap(map)
       } else {
         setEmpleadasMap({})
@@ -117,6 +123,12 @@ export default function LlegadasFM() {
     })
   }, [items, empleadasMap, buscar])
 
+  const openInMaps = (lat: number, lng: number, label?: string | null) => {
+    const query = label ? encodeURIComponent(`${label} @${lat},${lng}`) : `${lat},${lng}`
+    const url = `https://www.google.com/maps?q=${query}`
+    Linking.openURL(url)
+  }
+
   const renderItem = ({ item }: { item: Llegada }) => {
     const u = empleadasMap[item.usuario_id]
     const nombre = u ? `${u.nombre} ${u.apellido}` : '—'
@@ -124,16 +136,40 @@ export default function LlegadasFM() {
       ? dayjs(item.fecha).format('DD/MM')
       : String(item.fecha)
     const when = `${fechaStr} ${item.hora || ''}`.trim()
+    const hasCoords = item.latitud != null && item.longitud != null
 
     return (
       <View style={styles.card}>
         <View style={{ flex: 1 }}>
           <Text style={styles.nombre}>{nombre}</Text>
           <Text style={styles.meta}>{when} • {item.lugar || 'Sin lugar'}</Text>
-          {(item.latitud != null && item.longitud != null) && (
-            <Text style={styles.metaSmall}>
-              {Number(item.latitud).toFixed(5)}, {Number(item.longitud).toFixed(5)}
-            </Text>
+          {hasCoords && (
+            <>
+              <Text style={styles.metaSmall}>
+                {Number(item.latitud).toFixed(5)}, {Number(item.longitud).toFixed(5)}
+              </Text>
+              <View style={styles.mapBox}>
+                <MapView
+                  style={styles.map}
+                  pointerEvents="none"
+                  initialRegion={{
+                    latitude: Number(item.latitud),
+                    longitude: Number(item.longitud),
+                    latitudeDelta: 0.005,
+                    longitudeDelta: 0.005,
+                  }}
+                >
+                  <Marker coordinate={{ latitude: Number(item.latitud), longitude: Number(item.longitud) }} />
+                </MapView>
+                <TouchableOpacity
+                  onPress={() => openInMaps(Number(item.latitud!), Number(item.longitud!), item.lugar)}
+                  style={styles.mapBtn}
+                  activeOpacity={0.9}
+                >
+                  <Text style={styles.mapBtnText}>Ver mapa</Text>
+                </TouchableOpacity>
+              </View>
+            </>
           )}
         </View>
       </View>
@@ -143,9 +179,16 @@ export default function LlegadasFM() {
   const openPicker = () => setShowPicker(true)
   const clearDate = () => setSelectedDate(null)
 
+  useEffect(() => {
+    if (!lugar.trim()) { setSugerencias([]); return }
+    const q = lugar.toLowerCase()
+    const res = empresas.filter(e => e.nombre.toLowerCase().includes(q)).slice(0, 12)
+    setSugerencias(res)
+  }, [lugar, empresas])
+
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      {/* Header Back */}
+    <View style={styles.container}>
+      {/* Header: botón Volver arriba */}
       <View style={styles.headerRow}>
         <TouchableOpacity onPress={() => router.back()} style={styles.btnBack}>
           <Ionicons name="chevron-back" size={20} color="#fff" />
@@ -153,137 +196,161 @@ export default function LlegadasFM() {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.container}>
-        <Text style={styles.title}>Llegadas de Limpieza</Text>
+      {/* Título DEBAJO del botón */}
+      <Text style={styles.title}>Llegadas de Limpieza</Text>
 
-        <View style={styles.filters}>
-          {/* Selector de fecha */}
-          <View style={[styles.inputWrap, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.label}>Fecha</Text>
-              <TouchableOpacity onPress={openPicker} style={styles.dateBtn}>
-                <Text style={styles.dateBtnText}>
-                  {selectedDate ? dayjs(selectedDate).format('YYYY-MM-DD') : 'Todas'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            {selectedDate && (
-              <TouchableOpacity onPress={clearDate} style={styles.clearBtn}>
-                <Text style={styles.clearBtnText}>Quitar</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* Lugar (server-side) */}
-          <View style={styles.inputWrap}>
-            <Text style={styles.label}>Lugar</Text>
-            <TextInput
-              value={lugar}
-              onChangeText={setLugar}
-              placeholder="Filtrar por lugar"
-              style={styles.input}
-              autoCapitalize="none"
-            />
-          </View>
-
-          {/* Buscar por nombre (client-side) */}
-          <View style={styles.inputWrapFull}>
-            <Text style={styles.label}>Buscar empleado</Text>
-            <TextInput
-              value={buscar}
-              onChangeText={setBuscar}
-              placeholder="Nombre o apellido"
-              style={styles.input}
-              autoCapitalize="none"
-            />
-          </View>
-
-          <TouchableOpacity style={styles.refreshBtn} onPress={() => fetchLlegadas()}>
-            <Text style={styles.refreshText}>Aplicar</Text>
-          </TouchableOpacity>
-        </View>
-
-        {showPicker && (
-          <View style={{ backgroundColor: '#fff', borderRadius: 8, padding: 10 }}>
-            <DateTimePicker
-              value={selectedDate ?? new Date()}
-              mode="date"
-              display={Platform.OS === 'ios' ? 'inline' : 'spinner'}
-              onChange={(_, d) => {
-                if (Platform.OS === 'android') {
-                  setShowPicker(false)
-                  if (d) setSelectedDate(d)
-                } else {
-                  if (d) setSelectedDate(d)
-                }
-              }}
-              themeVariant="light"
-            />
-
-            <TouchableOpacity
-              onPress={() => setShowPicker(false)}
-              style={{ marginTop: 10, backgroundColor: '#ef4444', paddingVertical: 8, borderRadius: 6 }}
-            >
-              <Text style={{ color: '#fff', textAlign: 'center', fontWeight: '600' }}>Cancelar</Text>
+      <View style={styles.filters}>
+        <View style={[styles.inputWrap, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.label}>Fecha</Text>
+            <TouchableOpacity onPress={openPicker} style={styles.dateBtn}>
+              <Text style={styles.dateBtnText}>
+                {selectedDate ? dayjs(selectedDate).format('YYYY-MM-DD') : 'Todas'}
+              </Text>
             </TouchableOpacity>
           </View>
-        )}
+          {selectedDate && (
+            <TouchableOpacity onPress={clearDate} style={styles.clearBtn}>
+              <Text style={styles.clearBtnText}>Quitar</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
-        {loading ? (
-          <ActivityIndicator />
-        ) : (
-          <FlatList
-            data={dataRender}
-            keyExtractor={(it) => it.id}
-            renderItem={renderItem}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-            ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#6b7280' }}>No hay llegadas para ese filtro.</Text>}
-            contentContainerStyle={{ paddingBottom: 40 }}
-            keyboardShouldPersistTaps="handled"
+        <View style={[styles.inputWrap, { position: 'relative', zIndex: 20 }]}>
+          <Text style={styles.label}>Lugar</Text>
+          <TextInput
+            value={lugar}
+            onChangeText={setLugar}
+            placeholder="Filtrar por empresa/cliente"
+            style={styles.input}
+            autoCapitalize="none"
           />
-        )}
+          {sugerencias.length > 0 && (
+            <View style={styles.suggestBox}>
+              <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 220 }}>
+                {sugerencias.map((e) => (
+                  <TouchableOpacity
+                    key={e.id}
+                    style={styles.suggestItem}
+                    onPress={() => { setLugar(e.nombre); setSugerencias([]) }}
+                  >
+                    <Text style={{ color: '#0f172a' }}>{e.nombre}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.inputWrapFull}>
+          <Text style={styles.label}>Buscar empleado</Text>
+          <TextInput
+            value={buscar}
+            onChangeText={setBuscar}
+            placeholder="Nombre o apellido"
+            style={styles.input}
+            autoCapitalize="none"
+          />
+        </View>
+
+        <TouchableOpacity style={styles.refreshBtn} onPress={() => fetchLlegadas()}>
+          <Text style={styles.refreshText}>Aplicar</Text>
+        </TouchableOpacity>
       </View>
-    </SafeAreaView>
+
+      {showPicker && (
+        <View style={{ backgroundColor: '#fff', borderRadius: 8, padding: 10 }}>
+          <DateTimePicker
+            value={selectedDate ?? new Date()}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'inline' : 'spinner'}
+            onChange={(_, d) => {
+              if (Platform.OS === 'android') {
+                setShowPicker(false)
+                if (d) setSelectedDate(d)
+              } else {
+                if (d) setSelectedDate(d)
+              }
+            }}
+            themeVariant="light"
+          />
+          <TouchableOpacity
+            onPress={() => setShowPicker(false)}
+            style={{ marginTop: 10, backgroundColor: '#ef4444', paddingVertical: 8, borderRadius: 6 }}
+          >
+            <Text style={{ color: '#fff', textAlign: 'center', fontWeight: '600' }}>
+              Cancelar
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {loading ? (
+        <ActivityIndicator />
+      ) : (
+        <FlatList
+          data={dataRender}
+          keyExtractor={(it) => it.id}
+          renderItem={renderItem}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#6b7280' }}>No hay llegadas para ese filtro.</Text>}
+          contentContainerStyle={{ paddingBottom: 40 }}
+          keyboardShouldPersistTaps="handled"
+        />
+      )}
+    </View>
   )
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#fff' },
-  headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 40 }, // 👈 margen 40
+  container: { flex: 1, backgroundColor: '#fff', padding: 16, paddingTop: 70 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', columnGap: 12, marginBottom: 6 },
   btnBack: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#6b7280',
-    paddingHorizontal: 14,
-    height: 40,
-    borderRadius: 10,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#6b7280',
+    paddingHorizontal: 14, height: 40, borderRadius: 10,
   },
   btnBackText: { color: '#fff', fontWeight: '700', marginLeft: 4 },
 
-  container: { flex: 1, backgroundColor: '#fff', padding: 16, paddingTop: 50 }, // ya tenía 50, lo mantengo
-  title: { fontSize: 20, fontWeight: 'bold', marginBottom: 12 },
+  // Título debajo del botón
+  title: { fontSize: 22, fontWeight: 'bold', color: '#0f172a', marginBottom: 10 },
+
   filters: { flexDirection: 'row', gap: 8, alignItems: 'flex-end', marginBottom: 12, flexWrap: 'wrap' },
   inputWrap: { width: '47%' },
   inputWrapFull: { width: '100%' },
   label: { fontSize: 12, color: '#6b7280', marginBottom: 4 },
-  input: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10 },
+  input: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, backgroundColor: '#fff' },
+
+  suggestBox: {
+    position: 'absolute', top: 56, left: 0, right: 0, backgroundColor: '#fff',
+    borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 10, zIndex: 50, elevation: 6,
+  },
+  suggestItem: {
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e2e8f0',
+  },
+
   dateBtn: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    justifyContent: 'center',
-    backgroundColor: '#f3f4f6',
+    borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 12, justifyContent: 'center', backgroundColor: '#f3f4f6',
   },
   dateBtnText: { color: '#111827', fontWeight: '600', fontSize: 14 },
   clearBtn: { backgroundColor: '#ef4444', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, alignSelf: 'flex-end' },
   clearBtnText: { color: '#fff', fontWeight: '700' },
   refreshBtn: { backgroundColor: '#1e40af', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12 },
   refreshText: { color: '#fff', fontWeight: '600' },
-  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', padding: 12, borderRadius: 10, marginBottom: 8 },
+
+  card: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#f8fafc', padding: 12, borderRadius: 10, marginBottom: 8 },
   nombre: { fontWeight: '700' },
   meta: { color: '#374151', marginTop: 2 },
   metaSmall: { color: '#6b7280', marginTop: 2, fontSize: 12 },
+
+  mapBox: {
+    marginTop: 8, height: 120, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#e2e8f0',
+  },
+  map: { flex: 1 },
+  mapBtn: {
+    position: 'absolute', right: 8, bottom: 8, backgroundColor: '#2563EB',
+    paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8,
+  },
+  mapBtnText: { color: '#fff', fontWeight: '700' },
 })
