@@ -14,6 +14,10 @@ export default function SuperadminIndex() {
     { label: 'Ver Tareas',    icon: 'checkbox-outline',      path: '/(superadmin)/ver-tareas' },
     { label: 'Llegadas',      icon: 'time-outline',          path: '/(superadmin)/llegadas' },
     { label: 'Asignar Tarea', icon: 'add-circle-outline',    path: '/(superadmin)/asignar-tarea' },
+
+    // 👇 nuevos (quedan uno al lado del otro en la última fila)
+    { label: 'Agregar Empresa/Cliente', icon: 'briefcase-outline',   path: '/(superadmin)/crear-empresa' },
+    { label: 'Empresas/Clientes',       icon: 'business-outline',    path: '/(superadmin)/empresas-clientes' },
   ]
 
   return (

@@ -119,10 +119,6 @@ export default function DetalleTareaScreen() {
         <body>
           <div class="header">
             <img class="logo" src="https://lknfaxkigownvjsijzhb.supabase.co/storage/v1/object/public/publicos//facilitylogo.png" />
-            <div class="horarios">
-              <div>Horario de ingreso a sucursal:</div>
-              <div>Horario de finalización de tareas:</div>
-            </div>
           </div>
 
           <div class="section-title">Información General</div>

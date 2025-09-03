@@ -1,4 +1,3 @@
-// app/(superadmin)/_layout.tsx
 import { Tabs } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { Platform } from 'react-native'
@@ -74,6 +73,10 @@ export default function SuperadminTabsLayout() {
       <Tabs.Screen name="asignar-tarea" options={{ href: null }} />
       <Tabs.Screen name="tecnicos" options={{ href: null }} />
       <Tabs.Screen name="ver-tareas" options={{ href: null }} />
+
+      {/* --- rutas ocultas nuevas --- */}
+      <Tabs.Screen name="crear-empresa" options={{ href: null }} />
+      <Tabs.Screen name="empresas-clientes" options={{ href: null }} />
     </Tabs>
   )
 }

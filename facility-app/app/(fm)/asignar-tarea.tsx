@@ -17,21 +17,28 @@ export default function AsignarTareaScreen() {
   const [usuarioSeleccionado, setUsuarioSeleccionado] = useState<string>('')
   const [busquedaEmpleado, setBusquedaEmpleado] = useState('')
   const [empleadosFiltrados, setEmpleadosFiltrados] = useState<any[]>([])
+
+  // --- Empresas / Clientes (nuevo como usuarios) ---
+  const [empresas, setEmpresas] = useState<any[]>([])
+  const [empresaSeleccionada, setEmpresaSeleccionada] = useState<string>('') // id
+  const [busquedaEmpresa, setBusquedaEmpresa] = useState('')
+  const [empresasFiltradas, setEmpresasFiltradas] = useState<any[]>([])
+  const [empresa, setEmpresa] = useState('') // nombre (se sigue usando en el insert)
+
   const [descripcion, setDescripcion] = useState('')
   const [sucursal, setSucursal] = useState('')
   const [direccion, setDireccion] = useState('')
   const [provincia, setProvincia] = useState('')
   const [localidad, setLocalidad] = useState('')
-  const [empresa, setEmpresa] = useState('')
   const [checklistItems, setChecklistItems] = useState<string[]>([])
   const [nuevoItem, setNuevoItem] = useState('')
   const [cargando, setCargando] = useState(false)
   const [fechaRealizacion, setFechaRealizacion] = useState(new Date())
   const [mostrarPicker, setMostrarPicker] = useState(false)
 
-
   useEffect(() => {
     obtenerUsuarios()
+    obtenerEmpresas()
   }, [])
 
   const obtenerUsuarios = async () => {
@@ -47,18 +54,44 @@ export default function AsignarTareaScreen() {
     }
   }
 
+  const obtenerEmpresas = async () => {
+    const { data, error } = await supabase
+      .from('empresas')
+      .select('id, nombre')
+      .order('nombre', { ascending: true })
+
+    if (error) {
+      // Si hay RLS que no permite ver empresas, avisar
+      Alert.alert('Error', 'No se pudieron obtener las empresas/clientes')
+      setEmpresas([])
+    } else {
+      setEmpresas(data || [])
+    }
+  }
+
   useEffect(() => {
     if (busquedaEmpleado.trim() === '') {
       setEmpleadosFiltrados([])
       return
     }
-
     const resultado = usuarios.filter((u) => {
       const nombreCompleto = `${u.nombre} ${u.apellido}`.toLowerCase()
       return nombreCompleto.includes(busquedaEmpleado.toLowerCase())
     })
     setEmpleadosFiltrados(resultado)
   }, [busquedaEmpleado, usuarios])
+
+  // --- filtro empresas (igual patrón que empleados) ---
+  useEffect(() => {
+    if (busquedaEmpresa.trim() === '') {
+      setEmpresasFiltradas([])
+      return
+    }
+    const res = empresas.filter((e) =>
+      e.nombre.toLowerCase().includes(busquedaEmpresa.toLowerCase())
+    )
+    setEmpresasFiltradas(res)
+  }, [busquedaEmpresa, empresas])
 
   const agregarItemChecklist = () => {
     if (nuevoItem.trim() !== '') {
@@ -74,8 +107,16 @@ export default function AsignarTareaScreen() {
   }
 
   const asignarTarea = async () => {
+    // Validación: empresa debe ser una existente (seleccionada)
+    if (!empresaSeleccionada) {
+      Alert.alert(
+        'Faltan datos',
+        'Seleccioná una empresa/cliente existente. Si no existe, agregala primero desde "Agregar Empresa/Cliente".'
+      )
+      return
+    }
+
     if (
-      !empresa ||
       !usuarioSeleccionado ||
       !descripcion ||
       !sucursal ||
@@ -119,7 +160,8 @@ export default function AsignarTareaScreen() {
         direccion,
         provincia,
         localidad,
-        empresa,
+        // Se guarda el nombre de la empresa seleccionada (igual que antes) 
+        empresa, 
       },
     ])
 
@@ -132,6 +174,7 @@ export default function AsignarTareaScreen() {
       Alert.alert('Éxito', 'Tarea asignada correctamente.')
       setUsuarioSeleccionado('')
       setBusquedaEmpleado('')
+      setEmpleadosFiltrados([])
       setDescripcion('')
       setSucursal('')
       setDireccion('')
@@ -139,7 +182,10 @@ export default function AsignarTareaScreen() {
       setLocalidad('')
       setChecklistItems([])
       setFechaRealizacion(new Date())
-      setEmpresa('')
+      setEmpresa('')              // reset nombre
+      setEmpresaSeleccionada('')  // reset id
+      setBusquedaEmpresa('')
+      setEmpresasFiltradas([])
     }
   }
 
@@ -151,6 +197,7 @@ export default function AsignarTareaScreen() {
     >
       <Text style={styles.titulo}>Asignar Tarea</Text>
 
+      {/* Empleado */}
       <Text style={styles.label}>Empleado de mantenimiento:</Text>
       <TextInput
         placeholder="Buscar por nombre o apellido"
@@ -188,9 +235,52 @@ export default function AsignarTareaScreen() {
         </TouchableOpacity>
       ))}
 
-      <Text style={styles.label}>Empresa:</Text>
-      <TextInput value={empresa} onChangeText={setEmpresa} style={styles.input} />
+      {/* Empresa / Cliente (nuevo) */}
+      <Text style={styles.label}>Empresa / Cliente:</Text>
+      <TextInput
+        placeholder="Buscar empresa o cliente"
+        value={busquedaEmpresa}
+        onChangeText={(txt) => {
+          setBusquedaEmpresa(txt)
+          // Si el texto cambia, limpiar selección previa
+          setEmpresaSeleccionada('')
+          setEmpresa('')
+        }}
+        style={styles.input}
+      />
+      {empresasFiltradas.map((e) => (
+        <TouchableOpacity
+          key={e.id}
+          style={[
+            styles.usuarioItem,
+            empresaSeleccionada === e.id && styles.usuarioSeleccionado,
+          ]}
+          onPress={() => {
+            if (empresaSeleccionada === e.id) {
+              setEmpresaSeleccionada('')
+              setBusquedaEmpresa('')
+              setEmpresasFiltradas([])
+              setEmpresa('')
+            } else {
+              setEmpresaSeleccionada(e.id)
+              setBusquedaEmpresa(e.nombre)
+              setEmpresasFiltradas([])
+              setEmpresa(e.nombre) // mantener el string que ya usabas en el insert
+            }
+          }}
+        >
+          <Text
+            style={[
+              styles.usuarioTexto,
+              empresaSeleccionada === e.id && styles.usuarioTextoSeleccionado,
+            ]}
+          >
+            {e.nombre}
+          </Text>
+        </TouchableOpacity>
+      ))}
 
+      {/* Ubicación */}
       <Text style={styles.label}>Sucursal:</Text>
       <TextInput value={sucursal} onChangeText={setSucursal} style={styles.input} />
 
@@ -203,6 +293,7 @@ export default function AsignarTareaScreen() {
       <Text style={styles.label}>Dirección:</Text>
       <TextInput value={direccion} onChangeText={setDireccion} style={styles.input} />
 
+      {/* Descripción */}
       <Text style={styles.label}>Descripción de la tarea:</Text>
       <TextInput
         value={descripcion}
@@ -211,6 +302,7 @@ export default function AsignarTareaScreen() {
         multiline
       />
 
+      {/* Checklist */}
       <Text style={styles.label}>Checklist de actividades:</Text>
       {checklistItems.map((item, index) => (
         <View key={index} style={styles.checkItem}>
@@ -233,27 +325,28 @@ export default function AsignarTareaScreen() {
         </TouchableOpacity>
       </View>
 
-        <Text style={styles.label}>Fecha y hora de realización:</Text>
-          <TouchableOpacity
-            onPress={() => setMostrarPicker(true)}
-            style={[styles.input, { justifyContent: 'center' }]}
-          >
-            <Text>{fechaRealizacion.toLocaleString()}</Text>
-          </TouchableOpacity>
+      {/* Fecha y hora */}
+      <Text style={styles.label}>Fecha y hora de realización:</Text>
+      <TouchableOpacity
+        onPress={() => setMostrarPicker(true)}
+        style={[styles.input, { justifyContent: 'center' }]}
+      >
+        <Text>{fechaRealizacion.toLocaleString()}</Text>
+      </TouchableOpacity>
 
-          <DateTimePickerModal
-            isVisible={mostrarPicker}
-            mode="datetime"
-            date={fechaRealizacion}
-            locale="es-AR" // opcional
-            onConfirm={(date) => {
-              setFechaRealizacion(date)
-              setMostrarPicker(false)
-            }}
-            onCancel={() => setMostrarPicker(false)}
-          />
+      <DateTimePickerModal
+        isVisible={mostrarPicker}
+        mode="datetime"
+        date={fechaRealizacion}
+        locale="es-AR"
+        onConfirm={(date) => {
+          setFechaRealizacion(date)
+          setMostrarPicker(false)
+        }}
+        onCancel={() => setMostrarPicker(false)}
+      />
 
-
+      {/* Asignar */}
       <TouchableOpacity style={styles.boton} onPress={asignarTarea} disabled={cargando}>
         <Text style={styles.botonTexto}>
           {cargando ? 'Asignando...' : 'Asignar tarea'}

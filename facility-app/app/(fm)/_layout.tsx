@@ -1,4 +1,3 @@
-// app/(fm)/_layout.tsx
 import { Ionicons } from '@expo/vector-icons'
 import { Tabs } from 'expo-router'
 import { Platform } from 'react-native'
@@ -7,7 +6,7 @@ export default function Layout() {
   return (
     <Tabs
       screenOptions={{
-        headerShown: false,                 // oculta el título de arriba
+        headerShown: false,
         tabBarActiveTintColor: '#2563EB',
         tabBarInactiveTintColor: '#9CA3AF',
         tabBarHideOnKeyboard: true,
@@ -78,17 +77,20 @@ export default function Layout() {
           ),
         }}
       />
-      <Tabs.Screen
-  name="perfil"
-  options={{
-    title: 'Perfil',
-    tabBarIcon: ({ color, size }) => (
-      <Ionicons name="person-circle-outline" size={size} color={color} />
-    ),
-  }}
-/>
 
+      <Tabs.Screen
+        name="perfil"
+        options={{
+          title: 'Perfil',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person-circle-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
+      {/* RUTAS OCULTAS */}
+      <Tabs.Screen name="crear-empresa" options={{ href: null }} />
+      <Tabs.Screen name="empresas-clientes" options={{ href: null }} />
     </Tabs>
-    
   )
 }

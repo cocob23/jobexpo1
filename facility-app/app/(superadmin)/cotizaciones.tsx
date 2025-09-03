@@ -1,4 +1,3 @@
-// app/(superadmin)/cotizaciones.tsx
 import { useEffect, useMemo, useState } from 'react'
 import {
   Alert,
@@ -64,6 +63,11 @@ export default function CotizacionesSuperadmin() {
   const [fms, setFms] = useState<Usuario[]>([])
   const [abrirFM, setAbrirFM] = useState(false)
 
+  // Empresas para autocompletar en el filtro "Cliente…"
+  const [empresas, setEmpresas] = useState<{ id: string; nombre: string }[]>([])
+  const [empresasFiltradas, setEmpresasFiltradas] = useState<{ id: string; nombre: string }[]>([])
+  const [mostrarSugerenciasCliente, setMostrarSugerenciasCliente] = useState(false)
+
   const estados: Estado[] = useMemo(
     () => ['cotizado', 'aprobado', 'cerrado', 'facturado', 'desestimado'],
     []
@@ -84,14 +88,12 @@ export default function CotizacionesSuperadmin() {
     try {
       return `$ ${Number(n).toLocaleString('es-AR')}`
     } catch {
-      // fallback simple
       return `$ ${n}`
     }
   }
 
   const formatDate = (s: string | null) => {
     if (!s) return '—'
-    // Si llega en formato raro, intento parsear yyyy-mm-dd
     const parts = s.split('-')
     if (parts.length === 3 && parts[0].length === 4) {
       const [yyyy, mm, dd] = parts
@@ -100,12 +102,13 @@ export default function CotizacionesSuperadmin() {
         return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`
       }
     }
-    return s // si no, muestro crudo
+    return s
   }
 
   useEffect(() => {
     cargarFMs()
     cargarListado()
+    cargarEmpresas()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -116,6 +119,14 @@ export default function CotizacionesSuperadmin() {
       .eq('rol', 'fm')
       .order('apellido', { ascending: true })
     setFms(data || [])
+  }
+
+  const cargarEmpresas = async () => {
+    const { data, error } = await supabase
+      .from('empresas')
+      .select('id, nombre')
+      .order('nombre', { ascending: true })
+    if (!error && data) setEmpresas(data)
   }
 
   const cargarListado = async () => {
@@ -152,6 +163,18 @@ export default function CotizacionesSuperadmin() {
     setCargando(false)
   }
 
+  useEffect(() => {
+    if (!clienteQ.trim()) {
+      setEmpresasFiltradas([])
+      setMostrarSugerenciasCliente(false)
+      return
+    }
+    const q = clienteQ.toLowerCase()
+    const res = empresas.filter((e) => e.nombre.toLowerCase().includes(q)).slice(0, 12)
+    setEmpresasFiltradas(res)
+    setMostrarSugerenciasCliente(res.length > 0)
+  }, [clienteQ, empresas])
+
   const limpiarFiltros = () => {
     setQId('')
     setFmId('')
@@ -159,6 +182,8 @@ export default function CotizacionesSuperadmin() {
     setEstado('')
     setDesde('')
     setHasta('')
+    setEmpresasFiltradas([])
+    setMostrarSugerenciasCliente(false)
   }
 
   const verArchivo = async (row: Cotizacion) => {
@@ -240,14 +265,39 @@ export default function CotizacionesSuperadmin() {
             )}
           </View>
 
-          <TextInput
-            placeholder="Cliente…"
-            value={clienteQ}
-            onChangeText={setClienteQ}
-            style={styles.input}
-            onSubmitEditing={cargarListado}
-            placeholderTextColor="#94a3b8"
-          />
+          {/* Cliente con autocompletar */}
+          <View style={{ position: 'relative' }}>
+            <TextInput
+              placeholder="Cliente…"
+              value={clienteQ}
+              onChangeText={(t) => {
+                setClienteQ(t)
+                setMostrarSugerenciasCliente(true)
+              }}
+              style={styles.input}
+              onSubmitEditing={cargarListado}
+              placeholderTextColor="#94a3b8"
+            />
+            {mostrarSugerenciasCliente && empresasFiltradas.length > 0 && (
+              <View style={styles.suggestBox}>
+                <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 220 }}>
+                  {empresasFiltradas.map((e) => (
+                    <TouchableOpacity
+                      key={e.id}
+                      style={styles.suggestItem}
+                      onPress={() => {
+                        setClienteQ(e.nombre)
+                        setEmpresasFiltradas([])
+                        setMostrarSugerenciasCliente(false)
+                      }}
+                    >
+                      <Text style={{ color: '#0f172a' }}>{e.nombre}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+          </View>
 
           {/* Estado: botón que abre Alert con opciones */}
           <TouchableOpacity
@@ -380,6 +430,25 @@ const styles = StyleSheet.create({
   fmItem: {
     paddingHorizontal: 12, paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e2e8f0',
+  },
+
+  // Sugerencias cliente
+  suggestBox: {
+    position: 'absolute',
+    top: 52,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 10,
+    zIndex: 50,
+  },
+  suggestItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e2e8f0',
   },
 
   filaBtns: { flexDirection: 'row', gap: 10 },

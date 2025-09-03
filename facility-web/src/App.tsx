@@ -19,7 +19,6 @@ import TicketsFM from './fm/tickets'
 import CotizacionesFM from './fm/cotizaciones'
 import CrearEmpresaFM from './fm/crear-empresa'
 
-
 // Superadmin
 import SuperadminLayout from './superadmin/SuperadminLayout'
 import SuperadminHome from './superadmin/SuperAdminHome'
@@ -32,15 +31,17 @@ import AsignarTareaSA from './superadmin/asignar-tarea'
 import VerTareasSA from './superadmin/ver-tareas'
 import LlegadasSA from './superadmin/llegadas'
 import CotizacionesSuperadmin from './superadmin/cotizaciones'
-import DetalleTareaSA from './superadmin/detalle-tarea' // ⬅️ agregado
+import DetalleTareaSA from './superadmin/detalle-tarea'
 import CrearEmpresaSA from './superadmin/crear-empresa'
 
+// ⬇️ IMPORTA EL LISTADO WEB DE EMPRESAS/CLIENTES
+import EmpresasClientesSA from './superadmin/empresas-clientes'
 
 // Mantenimiento Externo
 import TecnicosExternosLayout from './mantenimiento-externo/TecnicosExternosLayout'
 import PlanillasTecnicosExternos from './mantenimiento-externo/planillas'
 import MantenimientoExternoHome from './mantenimiento-externo/Home'
-import PerfilExterno from './mantenimiento-externo/perfil' // ⬅️ nuevo
+import PerfilExterno from './mantenimiento-externo/perfil'
 
 // Utils
 import ProtectedRoute from './components/ProtectedRoute'
@@ -66,14 +67,16 @@ export default function App() {
           <Route path="tecnicos" element={<TecnicosSA />} />
           <Route path="asignar-tarea" element={<AsignarTareaSA />} />
           <Route path="ver-tareas" element={<VerTareasSA />} />
-          <Route path="detalle-tarea/:id" element={<DetalleTareaSA />} /> {/* ⬅️ agregado */}
+          <Route path="detalle-tarea/:id" element={<DetalleTareaSA />} />
           <Route path="tickets" element={<TicketsSA />} />
           <Route path="perfil" element={<PerfilSuperadmin />} />
           <Route path="perfil-tecnico/:id" element={<PerfilTecnicoSA />} />
           <Route path="llegadas" element={<LlegadasSA />} />
           <Route path="cotizaciones" element={<CotizacionesSuperadmin />} />
-          <Route path="empresas/nueva" element={<CrearEmpresaSA />} />   {/* ⬅️ NUEVA */}
+          <Route path="empresas/nueva" element={<CrearEmpresaSA />} />
 
+          {/* ⬇️ NUEVA RUTA: LISTADO DE EMPRESAS/CLIENTES */}
+          <Route path="empresas-clientes" element={<EmpresasClientesSA />} />
         </Route>
 
         {/* RUTAS FM */}
@@ -96,11 +99,10 @@ export default function App() {
           <Route path="llegadas" element={<LlegadasFM />} />
           <Route path="tickets" element={<TicketsFM />} />
           <Route path="cotizaciones" element={<CotizacionesFM />} />
-          <Route path="empresas/nueva" element={<CrearEmpresaFM />} />   {/* ⬅️ NUEVA */}
-
+          <Route path="empresas/nueva" element={<CrearEmpresaFM />} />
         </Route>
 
-        {/* RUTAS MANTENIMIENTO EXTERNO (con navbar/layout) */}
+        {/* RUTAS MANTENIMIENTO EXTERNO */}
         <Route
           path="/mantenimiento-externo"
           element={
@@ -111,7 +113,7 @@ export default function App() {
         >
           <Route index element={<MantenimientoExternoHome />} />
           <Route path="planillas" element={<PlanillasTecnicosExternos />} />
-          <Route path="perfil" element={<PerfilExterno />} /> {/* ⬅️ nuevo */}
+          <Route path="perfil" element={<PerfilExterno />} />
         </Route>
 
         {/* Redirección de la ruta vieja */}

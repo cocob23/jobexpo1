@@ -1,4 +1,3 @@
-// app/(fm)/index.tsx
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
@@ -8,14 +7,17 @@ export default function IndexFM() {
 
   // Acciones rápidas (1 botón por funcionalidad)
   const acciones: { label: string; icon: keyof typeof Ionicons.glyphMap; path: string }[] = [
-    { label: 'Asignar Tarea',        icon: 'add-circle-outline',    path: '/(fm)/asignar-tarea' },
-    { label: 'Ver Tareas',           icon: 'checkbox-outline',      path: '/(fm)/ver-tareas' },
-    { label: 'Aprobar Trabajos',     icon: 'checkmark-done-outline',path: '/(fm)/aprobar-trabajos' },
-    { label: 'Agregar Técnico',      icon: 'person-add-outline',    path: '/crear-tecnico' }, // según tu ruta actual
-    { label: 'Cotizaciones',         icon: 'calculator-outline',    path: '/(fm)/cotizaciones' },
-    { label: 'Técnicos',             icon: 'construct-outline',     path: '/(fm)/tecnicos' },
-    { label: 'Llegadas',             icon: 'time-outline',          path: '/(fm)/llegadas' },
-    { label: 'Perfil',               icon: 'person-circle-outline', path: '/(fm)/perfil' },
+    { label: 'Asignar Tarea',        icon: 'add-circle-outline',     path: '/(fm)/asignar-tarea' },
+    { label: 'Ver Tareas',           icon: 'checkbox-outline',       path: '/(fm)/ver-tareas' },
+    { label: 'Aprobar Trabajos',     icon: 'checkmark-done-outline', path: '/(fm)/aprobar-trabajos' },
+    { label: 'Agregar Técnico',      icon: 'person-add-outline',     path: '/crear-tecnico' }, // según tu ruta actual
+    { label: 'Cotizaciones',         icon: 'calculator-outline',     path: '/(fm)/cotizaciones' },
+    { label: 'Técnicos',             icon: 'construct-outline',      path: '/(fm)/tecnicos' },
+    { label: 'Llegadas',             icon: 'time-outline',           path: '/(fm)/llegadas' },
+    { label: 'Perfil',               icon: 'person-circle-outline',  path: '/(fm)/perfil' },
+
+    // 👇 nuevos (quedan uno al lado del otro en la última fila)
+    { label: 'Agregar Empresa/Cliente', icon: 'briefcase-outline',   path: '/(fm)/crear-empresa' },
   ]
 
   return (

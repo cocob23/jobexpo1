@@ -56,6 +56,12 @@ export default function SuperadminIndex() {
             <span>Crear empresa/cliente</span>
           </button>
 
+          {/* ⬇️ NUEVA CARD: Ver empresas/clientes */}
+          <button style={styles.card} onClick={() => navigate('/superadmin/empresas-clientes')}>
+            <FaBuilding size={32} />
+            <span>Empresas / Clientes</span>
+          </button>
+
           <button style={styles.card} onClick={() => navigate('/superadmin/ver-tareas')}>
             <FaTasks size={32} />
             <span>Ver Tareas</span>

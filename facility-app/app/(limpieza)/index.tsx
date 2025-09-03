@@ -1,57 +1,52 @@
 import { useRouter } from 'expo-router'
-import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import { Image, SafeAreaView, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native'
 
 export default function InicioLimpieza() {
   const router = useRouter()
 
   return (
-    <View style={styles.container}>
-      <Image
-        source={require('../../assets/images/logo.png')} // reemplazá si usás otro path
-        style={styles.logo}
-        resizeMode="contain"
-      />
+    <SafeAreaView style={styles.safe}>
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        <Image source={require('@/assets/images/logo.png')} style={styles.logo} />
+        <Text style={styles.titulo}>Panel de Limpieza</Text>
 
-      <TouchableOpacity
-        style={styles.boton}
-        onPress={() => router.push('/(limpieza)/marcar-llegada')}
-      >
-        <Text style={styles.botonTexto}>Marcar llegada</Text>
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.botonGrande}
+          onPress={() => router.push('/(limpieza)/marcar-llegada')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.textoBoton}>🕒 Marcar llegada</Text>
+        </TouchableOpacity>
 
-      <TouchableOpacity
-        style={styles.boton}
-        onPress={() => router.push('/(limpieza)/mis-llegadas')}
-      >
-        <Text style={styles.botonTexto}>Mis llegadas</Text>
-      </TouchableOpacity>
-    </View>
+        <TouchableOpacity
+          style={styles.botonGrande}
+          onPress={() => router.push('/(limpieza)/mis-llegadas')}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.textoBoton}>📍 Mis llegadas</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 24,
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-  },
-  logo: {
-    height: 120,
-    width: 200,
-    alignSelf: 'center',
-    marginBottom: 40,
-  },
-  boton: {
+  safe: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { padding: 24, alignItems: 'center', gap: 14 },
+  logo: { width: 200, height: 70, resizeMode: 'contain', marginTop: 100, marginBottom: 70},
+  titulo: { fontSize: 20, fontWeight: '700', color: '#0F172A', marginBottom: 50 },
+  botonGrande: {
+    width: '100%',
     backgroundColor: '#2563EB',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-    alignItems: 'center',
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 6,
+    marginTop: 4,
   },
-  botonTexto: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
+  textoBoton: { color: '#fff', fontSize: 16, fontWeight: '700', textAlign: 'center', letterSpacing: 0.3 },
 })

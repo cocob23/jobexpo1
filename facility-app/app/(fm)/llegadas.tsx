@@ -2,9 +2,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   View, Text, FlatList, StyleSheet, RefreshControl,
-  TouchableOpacity, ActivityIndicator, TextInput, Platform
+  TouchableOpacity, ActivityIndicator, TextInput, Platform, Linking, ScrollView
 } from 'react-native'
 import DateTimePicker from '@react-native-community/datetimepicker'
+import MapView, { Marker } from 'react-native-maps'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
 import { supabase } from '@/constants/supabase'
@@ -14,14 +15,15 @@ dayjs.locale('es')
 type Llegada = {
   id: string
   usuario_id: string
-  fecha: string            // en DB: DATE o TIMESTAMP (guardamos como string YYYY-MM-DD si es DATE)
-  hora: string             // "HH:mm" o similar
+  fecha: string            // YYYY-MM-DD si es DATE
+  hora: string             // "HH:mm"
   lugar: string | null
   latitud?: number | null
   longitud?: number | null
 }
 
 type Usuario = { id: string; nombre: string; apellido: string }
+type Empresa = { id: string; nombre: string }
 
 export default function LlegadasFM() {
   const [items, setItems] = useState<Llegada[]>([])
@@ -34,6 +36,21 @@ export default function LlegadasFM() {
   const [showPicker, setShowPicker] = useState(false)
   const [lugar, setLugar] = useState<string>('')
   const [buscar, setBuscar] = useState<string>('')
+
+  // empresas para autocompletar (filtro "Lugar")
+  const [empresas, setEmpresas] = useState<Empresa[]>([])
+  const [sugerencias, setSugerencias] = useState<Empresa[]>([])
+
+  useEffect(() => {
+    // cargar empresas para sugerencias
+    ;(async () => {
+      const { data, error } = await supabase
+        .from('empresas')
+        .select('id, nombre')
+        .order('nombre', { ascending: true })
+      if (!error && data) setEmpresas(data as Empresa[])
+    })()
+  }, [])
 
   useEffect(() => {
     fetchLlegadas()
@@ -89,7 +106,7 @@ export default function LlegadasFM() {
           .in('id', ids)
         if (uerr) throw uerr
         const map: Record<string, Usuario> = {}
-        ;(usrs || []).forEach(u => { map[u.id] = u as Usuario })
+        ;(usrs || []).forEach((u: any) => { map[u.id] = u as Usuario })
         setEmpleadasMap(map)
       } else {
         setEmpleadasMap({})
@@ -118,6 +135,12 @@ export default function LlegadasFM() {
     })
   }, [items, empleadasMap, buscar])
 
+  const openInMaps = (lat: number, lng: number, label?: string | null) => {
+    const query = label ? encodeURIComponent(`${label} @${lat},${lng}`) : `${lat},${lng}`
+    const url = `https://www.google.com/maps?q=${query}`
+    Linking.openURL(url)
+  }
+
   const renderItem = ({ item }: { item: Llegada }) => {
     const u = empleadasMap[item.usuario_id]
     const nombre = u ? `${u.nombre} ${u.apellido}` : '—'
@@ -126,15 +149,43 @@ export default function LlegadasFM() {
       : String(item.fecha)
     const when = `${fechaStr} ${item.hora || ''}`.trim()
 
+    const hasCoords = item.latitud != null && item.longitud != null
+
     return (
       <View style={styles.card}>
         <View style={{ flex: 1 }}>
           <Text style={styles.nombre}>{nombre}</Text>
           <Text style={styles.meta}>{when} • {item.lugar || 'Sin lugar'}</Text>
-          {(item.latitud != null && item.longitud != null) && (
-            <Text style={styles.metaSmall}>
-              {Number(item.latitud).toFixed(5)}, {Number(item.longitud).toFixed(5)}
-            </Text>
+          {hasCoords && (
+            <>
+              <Text style={styles.metaSmall}>
+                {Number(item.latitud).toFixed(5)}, {Number(item.longitud).toFixed(5)}
+              </Text>
+
+              {/* Mini mapa */}
+              <View style={styles.mapBox}>
+                <MapView
+                  style={styles.map}
+                  pointerEvents="none" // solo visual
+                  initialRegion={{
+                    latitude: Number(item.latitud),
+                    longitude: Number(item.longitud),
+                    latitudeDelta: 0.005,
+                    longitudeDelta: 0.005,
+                  }}
+                >
+                  <Marker coordinate={{ latitude: Number(item.latitud), longitude: Number(item.longitud) }} />
+                </MapView>
+
+                <TouchableOpacity
+                  onPress={() => openInMaps(Number(item.latitud!), Number(item.longitud!), item.lugar)}
+                  style={styles.mapBtn}
+                  activeOpacity={0.9}
+                >
+                  <Text style={styles.mapBtnText}>Ver mapa</Text>
+                </TouchableOpacity>
+              </View>
+            </>
           )}
         </View>
       </View>
@@ -143,6 +194,14 @@ export default function LlegadasFM() {
 
   const openPicker = () => setShowPicker(true)
   const clearDate = () => setSelectedDate(null)
+
+  // Sugerencias al escribir "Lugar"
+  useEffect(() => {
+    if (!lugar.trim()) { setSugerencias([]); return }
+    const q = lugar.toLowerCase()
+    const res = empresas.filter(e => e.nombre.toLowerCase().includes(q)).slice(0, 12)
+    setSugerencias(res)
+  }, [lugar, empresas])
 
   return (
     <View style={styles.container}>
@@ -167,16 +226,34 @@ export default function LlegadasFM() {
           )}
         </View>
 
-        {/* Lugar (server-side) */}
-        <View style={styles.inputWrap}>
+        {/* Lugar (server-side) con autocompletar */}
+        <View style={[styles.inputWrap, { position: 'relative', zIndex: 20 }]}>
           <Text style={styles.label}>Lugar</Text>
           <TextInput
             value={lugar}
             onChangeText={setLugar}
-            placeholder="Filtrar por lugar"
+            placeholder="Filtrar por empresa/cliente"
             style={styles.input}
             autoCapitalize="none"
           />
+          {sugerencias.length > 0 && (
+            <View style={styles.suggestBox}>
+              <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 220 }}>
+                {sugerencias.map((e) => (
+                  <TouchableOpacity
+                    key={e.id}
+                    style={styles.suggestItem}
+                    onPress={() => {
+                      setLugar(e.nombre)
+                      setSugerencias([])
+                    }}
+                  >
+                    <Text style={{ color: '#0f172a' }}>{e.nombre}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
+          )}
         </View>
 
         {/* Buscar por nombre (client-side) */}
@@ -196,40 +273,32 @@ export default function LlegadasFM() {
         </TouchableOpacity>
       </View>
 
-{showPicker && (
-  <View style={{ backgroundColor: '#fff', borderRadius: 8, padding: 10 }}>
-    <DateTimePicker
-      value={selectedDate ?? new Date()}
-      mode="date"
-      display={Platform.OS === 'ios' ? 'inline' : 'spinner'}
-      onChange={(_, d) => {
-        if (Platform.OS === 'android') {
-          setShowPicker(false)
-          if (d) setSelectedDate(d)
-        } else {
-          if (d) setSelectedDate(d)
-        }
-      }}
-      themeVariant="light"
-    />
-
-    {/* Botón Cancelar */}
-    <TouchableOpacity
-      onPress={() => setShowPicker(false)}
-      style={{
-        marginTop: 10,
-        backgroundColor: '#ef4444',
-        paddingVertical: 8,
-        borderRadius: 6
-      }}
-    >
-      <Text style={{ color: '#fff', textAlign: 'center', fontWeight: '600' }}>
-        Cancelar
-      </Text>
-    </TouchableOpacity>
-  </View>
-)}
-
+      {showPicker && (
+        <View style={{ backgroundColor: '#fff', borderRadius: 8, padding: 10 }}>
+          <DateTimePicker
+            value={selectedDate ?? new Date()}
+            mode="date"
+            display={Platform.OS === 'ios' ? 'inline' : 'spinner'}
+            onChange={(_, d) => {
+              if (Platform.OS === 'android') {
+                setShowPicker(false)
+                if (d) setSelectedDate(d)
+              } else {
+                if (d) setSelectedDate(d)
+              }
+            }}
+            themeVariant="light"
+          />
+          <TouchableOpacity
+            onPress={() => setShowPicker(false)}
+            style={{ marginTop: 10, backgroundColor: '#ef4444', paddingVertical: 8, borderRadius: 6 }}
+          >
+            <Text style={{ color: '#fff', textAlign: 'center', fontWeight: '600' }}>
+              Cancelar
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {loading ? (
         <ActivityIndicator />
@@ -255,7 +324,27 @@ const styles = StyleSheet.create({
   inputWrap: { width: '47%' },
   inputWrapFull: { width: '100%' },
   label: { fontSize: 12, color: '#6b7280', marginBottom: 4 },
-  input: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10 },
+  input: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, backgroundColor: '#fff' },
+  // Sugerencias
+  suggestBox: {
+    position: 'absolute',
+    top: 56,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 10,
+    zIndex: 50,
+    elevation: 6,
+  },
+  suggestItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#e2e8f0',
+  },
+
   dateBtn: {
     borderWidth: 1,
     borderColor: '#d1d5db',
@@ -265,17 +354,35 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#f3f4f6',
   },
-  dateBtnText: {
-    color: '#111827',
-    fontWeight: '600',
-    fontSize: 14,
-  },
+  dateBtnText: { color: '#111827', fontWeight: '600', fontSize: 14 },
   clearBtn: { backgroundColor: '#ef4444', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, alignSelf: 'flex-end' },
   clearBtnText: { color: '#fff', fontWeight: '700' },
   refreshBtn: { backgroundColor: '#1e40af', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12 },
   refreshText: { color: '#fff', fontWeight: '600' },
-  card: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', padding: 12, borderRadius: 10, marginBottom: 8 },
+
+  card: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#f8fafc', padding: 12, borderRadius: 10, marginBottom: 8 },
   nombre: { fontWeight: '700' },
   meta: { color: '#374151', marginTop: 2 },
   metaSmall: { color: '#6b7280', marginTop: 2, fontSize: 12 },
+
+  // Mini map
+  mapBox: {
+    marginTop: 8,
+    height: 120,
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  map: { flex: 1 },
+  mapBtn: {
+    position: 'absolute',
+    right: 8,
+    bottom: 8,
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  mapBtnText: { color: '#fff', fontWeight: '700' },
 })
