@@ -45,21 +45,6 @@ const toSlug = (s: string) =>
     .replace(/^-+|-+$/g, '')
     .slice(0, 60)
 
-const onlyDigits = (s: string) => s.replace(/\D/g, '')
-
-function validarCUIT(cuitRaw: string): boolean {
-  const cuit = onlyDigits(cuitRaw)
-  if (cuit.length !== 11) return false
-  const nums = cuit.split('').map(Number)
-  const factores = [5,4,3,2,7,6,5,4,3,2]
-  const base = nums.slice(0, 10)
-  const dv = nums[10]
-  const suma = base.reduce((acc, n, i) => acc + n * factores[i], 0)
-  const mod = suma % 11
-  const calc = mod === 0 ? 0 : mod === 1 ? 9 : 11 - mod
-  return calc === dv
-}
-
 export default function CrearEmpresaMovil() {
   const router = useRouter()
   const [f, setF] = useState<Form>(initial)
@@ -106,10 +91,7 @@ export default function CrearEmpresaMovil() {
       setErr('Completá el nombre.')
       return
     }
-    if (f.cuit && !validarCUIT(f.cuit)) {
-      setErr('El CUIT no es válido (opcional, pero si lo cargás debe ser válido).')
-      return
-    }
+    // ✅ Sin validación de CUIT (el usuario puede escribir con guiones, espacios, etc.)
 
     setLoading(true)
     try {
@@ -117,7 +99,7 @@ export default function CrearEmpresaMovil() {
 
       const payload = {
         nombre: f.nombre.trim(),
-        cuit: f.cuit ? onlyDigits(f.cuit) : null,
+        cuit: f.cuit ? f.cuit.trim() : null, // ✅ Se guarda tal cual
         email: f.email || null,
         telefono: f.telefono || null,
         direccion: f.direccion || null,
@@ -133,7 +115,6 @@ export default function CrearEmpresaMovil() {
         .single()
 
       if (error) {
-        // Postgres insufficient_privilege suele ser 42501 en el origen
         if ((error as any).code === '42501') {
           setErr('No tenés permisos para crear empresas (RLS).')
         } else {
@@ -204,7 +185,8 @@ export default function CrearEmpresaMovil() {
               onFocus={() => setFocusKey('cuit')}
               onBlur={() => setFocusKey(null)}
               focused={focusKey === 'cuit'}
-              keyboardType="number-pad"
+              keyboardType="default"   // ✅ permite guiones y cualquier caracter necesario
+              autoCapitalize="none"
             />
             <Field
               label="Email"
@@ -338,7 +320,7 @@ const CONTROL_HEIGHT = 48
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    paddingTop: 24,
+    paddingTop: 70, // 👈 margen superior para que no lo tape el notch
   },
   headerRow: {
     flexDirection: 'row',
@@ -361,8 +343,8 @@ const styles = StyleSheet.create({
   },
   title: {
     flex: 1,
-    fontSize: 20,
-    fontWeight: '800',
+    fontSize: 22,
+    fontWeight: 'bold',
     color: '#0f172a',
   },
   sub: { marginTop: 4, color: '#475569', marginBottom: 10 },

@@ -1,6 +1,9 @@
+// app/(superadmin)/empresas/index.tsx  (listado)
 import React, { useEffect, useState, useCallback } from 'react'
-import { SafeAreaView, ScrollView, StyleSheet, Text, View, RefreshControl } from 'react-native'
+import { ScrollView, StyleSheet, Text, View, RefreshControl, TouchableOpacity } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
+import { useRouter } from 'expo-router'
 import { supabase } from '@/constants/supabase'
 
 type Empresa = {
@@ -23,6 +26,7 @@ const fmtCUIT = (c: string | null) => {
 }
 
 export default function EmpresasClientesSuperadmin() {
+  const router = useRouter()
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -52,11 +56,20 @@ export default function EmpresasClientesSuperadmin() {
   }, [])
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top']}>
       <ScrollView
         contentContainerStyle={styles.container}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        keyboardShouldPersistTaps="handled"
       >
+        {/* Header Back */}
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.btnBack}>
+            <Ionicons name="chevron-back" size={20} color="#fff" />
+            <Text style={styles.btnBackText}>Volver</Text>
+          </TouchableOpacity>
+        </View>
+
         <Text style={styles.title}>Empresas / Clientes</Text>
 
         {error && (
@@ -124,7 +137,21 @@ export default function EmpresasClientesSuperadmin() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F8FAFC' },
-  container: { padding: 16 },
+  container: { padding: 16, paddingTop: 40 }, // 👈 margen 40
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  btnBack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#6b7280',
+    paddingHorizontal: 14,
+    height: 40,
+    borderRadius: 10,
+  },
+  btnBackText: { color: '#fff', fontWeight: '700', marginLeft: 4 },
   title: { fontSize: 20, fontWeight: '800', color: '#0F172A', marginBottom: 12 },
 
   alert: {

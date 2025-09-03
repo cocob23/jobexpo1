@@ -1,15 +1,19 @@
 import { useState } from 'react'
 import {
-    Alert,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Alert,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native'
+import { useRouter } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import { supabaseAdmin } from '../../constants/supabaseAdmin'
 
 export default function CrearTecnicoFM() {
+  const router = useRouter()
+
   const [nombre, setNombre] = useState('')
   const [apellido, setApellido] = useState('')
   const [email, setEmail] = useState('')
@@ -23,11 +27,12 @@ export default function CrearTecnicoFM() {
 
     const emailLimpio = email.trim().toLowerCase()
 
-    const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email: emailLimpio,
-      password,
-      email_confirm: true,
-    })
+    const { data: authUser, error: authError } =
+      await supabaseAdmin.auth.admin.createUser({
+        email: emailLimpio,
+        password,
+        email_confirm: true,
+      })
 
     if (authError) {
       Alert.alert('Error al crear usuario', authError.message)
@@ -57,7 +62,14 @@ export default function CrearTecnicoFM() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.titulo}>Crear nuevo técnico</Text>
+      {/* Header con botón Volver */}
+      <View style={styles.headerRow}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.btnBack}>
+          <Ionicons name="chevron-back" size={20} color="#fff" />
+          <Text style={styles.btnBackText}>Volver</Text>
+        </TouchableOpacity>
+        <Text style={styles.titulo}>Crear nuevo técnico</Text>
+      </View>
 
       <TextInput
         placeholder="Nombre"
@@ -106,22 +118,47 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 24,
-    justifyContent: 'center',
+    paddingTop: 170, // 👈 margen superior para que no lo tape el notch
     backgroundColor: '#fff',
   },
+
+  // Header
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    columnGap: 12,
+    marginBottom: 12,
+  },
+  btnBack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#6b7280',
+    paddingHorizontal: 14,
+    height: 40,
+    borderRadius: 10,
+  },
+  btnBackText: {
+    color: '#fff',
+    fontWeight: '700',
+    marginLeft: 4,
+  },
+
   titulo: {
+    flex: 1,
     fontSize: 22,
     fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center',
+    color: '#0f172a',
   },
+
   input: {
     borderWidth: 1,
     borderColor: '#ccc',
     borderRadius: 12,
     padding: 12,
     marginBottom: 14,
+    backgroundColor: '#fff',
   },
+
   boton: {
     backgroundColor: '#2563EB',
     padding: 14,

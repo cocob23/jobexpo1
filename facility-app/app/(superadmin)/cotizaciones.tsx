@@ -1,3 +1,4 @@
+// app/(superadmin)/cotizaciones/index.tsx  (CotizacionesSuperadmin)
 import { useEffect, useMemo, useState } from 'react'
 import {
   Alert,
@@ -8,11 +9,11 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  SafeAreaView,
-  Platform,
-  StatusBar,
   RefreshControl,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { useRouter } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '@/constants/supabase'
 
 type Estado = 'cotizado' | 'aprobado' | 'cerrado' | 'facturado' | 'desestimado'
@@ -36,7 +37,7 @@ type Cotizacion = {
   archivo_mimetype: string | null
   creado_en: string
   subida_por: string
-  usuarios?: Usuario | null // join
+  usuarios?: Usuario | null
 }
 
 const ESTADO_COLOR: Record<Estado, { bg: string; border: string; text: string }> = {
@@ -48,22 +49,20 @@ const ESTADO_COLOR: Record<Estado, { bg: string; border: string; text: string }>
 }
 
 export default function CotizacionesSuperadmin() {
+  const router = useRouter()
   const [cargando, setCargando] = useState(false)
   const [listado, setListado] = useState<Cotizacion[]>([])
 
-  // filtros
-  const [qId, setQId] = useState('')           // N° o UUID
-  const [fmId, setFmId] = useState<string>('') // elegido del selector
+  const [qId, setQId] = useState('')
+  const [fmId, setFmId] = useState<string>('')
   const [clienteQ, setClienteQ] = useState('')
   const [estado, setEstado] = useState<Estado | ''>('')
   const [desde, setDesde] = useState('')
   const [hasta, setHasta] = useState('')
 
-  // FMs para el "dropdown" simple
   const [fms, setFms] = useState<Usuario[]>([])
   const [abrirFM, setAbrirFM] = useState(false)
 
-  // Empresas para autocompletar en el filtro "Cliente…"
   const [empresas, setEmpresas] = useState<{ id: string; nombre: string }[]>([])
   const [empresasFiltradas, setEmpresasFiltradas] = useState<{ id: string; nombre: string }[]>([])
   const [mostrarSugerenciasCliente, setMostrarSugerenciasCliente] = useState(false)
@@ -73,7 +72,6 @@ export default function CotizacionesSuperadmin() {
     []
   )
 
-  // Helpers
   const isUUID = (s: string) =>
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s.trim())
 
@@ -85,11 +83,7 @@ export default function CotizacionesSuperadmin() {
 
   const formatMoney = (n: number | null) => {
     if (n == null) return '—'
-    try {
-      return `$ ${Number(n).toLocaleString('es-AR')}`
-    } catch {
-      return `$ ${n}`
-    }
+    try { return `$ ${Number(n).toLocaleString('es-AR')}` } catch { return `$ ${n}` }
   }
 
   const formatDate = (s: string | null) => {
@@ -106,26 +100,18 @@ export default function CotizacionesSuperadmin() {
   }
 
   useEffect(() => {
-    cargarFMs()
-    cargarListado()
-    cargarEmpresas()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    cargarFMs(); cargarListado(); cargarEmpresas()
   }, [])
 
   const cargarFMs = async () => {
     const { data } = await supabase
-      .from('usuarios')
-      .select('id, nombre, apellido, email')
-      .eq('rol', 'fm')
-      .order('apellido', { ascending: true })
+      .from('usuarios').select('id, nombre, apellido, email')
+      .eq('rol', 'fm').order('apellido', { ascending: true })
     setFms(data || [])
   }
 
   const cargarEmpresas = async () => {
-    const { data, error } = await supabase
-      .from('empresas')
-      .select('id, nombre')
-      .order('nombre', { ascending: true })
+    const { data, error } = await supabase.from('empresas').select('id, nombre').order('nombre', { ascending: true })
     if (!error && data) setEmpresas(data)
   }
 
@@ -141,17 +127,11 @@ export default function CotizacionesSuperadmin() {
       `)
       .order('numero', { ascending: false })
 
-    // Filtro por N°/UUID
     if (qId.trim()) {
-      if (isUUID(qId)) {
-        q = q.eq('id', qId.trim())
-      } else {
-        const n = parseNumero(qId)
-        if (n !== null) q = q.eq('numero', n)
-      }
+      if (isUUID(qId)) q = q.eq('id', qId.trim())
+      else { const n = parseNumero(qId); if (n !== null) q = q.eq('numero', n) }
     }
 
-    // Otros filtros
     if (fmId) q = q.eq('subida_por', fmId)
     if (clienteQ) q = q.ilike('cliente', `%${clienteQ}%`)
     if (estado) q = q.eq('estado', estado)
@@ -165,25 +145,16 @@ export default function CotizacionesSuperadmin() {
 
   useEffect(() => {
     if (!clienteQ.trim()) {
-      setEmpresasFiltradas([])
-      setMostrarSugerenciasCliente(false)
-      return
+      setEmpresasFiltradas([]); setMostrarSugerenciasCliente(false); return
     }
     const q = clienteQ.toLowerCase()
     const res = empresas.filter((e) => e.nombre.toLowerCase().includes(q)).slice(0, 12)
-    setEmpresasFiltradas(res)
-    setMostrarSugerenciasCliente(res.length > 0)
+    setEmpresasFiltradas(res); setMostrarSugerenciasCliente(res.length > 0)
   }, [clienteQ, empresas])
 
   const limpiarFiltros = () => {
-    setQId('')
-    setFmId('')
-    setClienteQ('')
-    setEstado('')
-    setDesde('')
-    setHasta('')
-    setEmpresasFiltradas([])
-    setMostrarSugerenciasCliente(false)
+    setQId(''); setFmId(''); setClienteQ(''); setEstado(''); setDesde(''); setHasta('')
+    setEmpresasFiltradas([]); setMostrarSugerenciasCliente(false)
   }
 
   const verArchivo = async (row: Cotizacion) => {
@@ -196,11 +167,10 @@ export default function CotizacionesSuperadmin() {
   const actualizarEstado = async (id: string, nuevo: Estado) => {
     const prev = listado.slice()
     setListado((x) => x.map((r) => (r.id === id ? { ...r, estado: nuevo } : r)))
-
     const { error } = await supabase.from('cotizaciones').update({ estado: nuevo }).eq('id', id)
     if (error) {
       Alert.alert('Error', 'No se pudo actualizar el estado: ' + error.message)
-      setListado(prev) // rollback visual
+      setListado(prev)
     }
   }
 
@@ -211,10 +181,7 @@ export default function CotizacionesSuperadmin() {
     Alert.alert(
       'Cambiar estado',
       `COT-${String(row.numero).padStart(6, '0')}`,
-      estados.map((es) => ({
-        text: es,
-        onPress: () => actualizarEstado(row.id, es),
-      })),
+      estados.map((es) => ({ text: es, onPress: () => actualizarEstado(row.id, es) })),
     )
   }
 
@@ -225,7 +192,15 @@ export default function CotizacionesSuperadmin() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      {/* Header Back */}
+      <View style={styles.headerRow}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.btnBack}>
+          <Ionicons name="chevron-back" size={20} color="#fff" />
+          <Text style={styles.btnBackText}>Volver</Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.wrap}>
         <Text style={styles.title}>Gestionar Cotizaciones (Superadmin)</Text>
 
@@ -240,7 +215,7 @@ export default function CotizacionesSuperadmin() {
             placeholderTextColor="#94a3b8"
           />
 
-          {/* Selector FM "simple" */}
+          {/* Selector FM */}
           <View>
             <TouchableOpacity style={styles.input} onPress={() => setAbrirFM((x) => !x)}>
               <Text style={styles.inputText}>{etiquetaFM()}</Text>
@@ -270,10 +245,7 @@ export default function CotizacionesSuperadmin() {
             <TextInput
               placeholder="Cliente…"
               value={clienteQ}
-              onChangeText={(t) => {
-                setClienteQ(t)
-                setMostrarSugerenciasCliente(true)
-              }}
+              onChangeText={(t) => { setClienteQ(t); setMostrarSugerenciasCliente(true) }}
               style={styles.input}
               onSubmitEditing={cargarListado}
               placeholderTextColor="#94a3b8"
@@ -285,11 +257,7 @@ export default function CotizacionesSuperadmin() {
                     <TouchableOpacity
                       key={e.id}
                       style={styles.suggestItem}
-                      onPress={() => {
-                        setClienteQ(e.nombre)
-                        setEmpresasFiltradas([])
-                        setMostrarSugerenciasCliente(false)
-                      }}
+                      onPress={() => { setClienteQ(e.nombre); setEmpresasFiltradas([]); setMostrarSugerenciasCliente(false) }}
                     >
                       <Text style={{ color: '#0f172a' }}>{e.nombre}</Text>
                     </TouchableOpacity>
@@ -299,7 +267,7 @@ export default function CotizacionesSuperadmin() {
             )}
           </View>
 
-          {/* Estado: botón que abre Alert con opciones */}
+          {/* Estado */}
           <TouchableOpacity
             style={styles.input}
             onPress={() =>
@@ -315,20 +283,8 @@ export default function CotizacionesSuperadmin() {
             <Text style={styles.inputText}>{estado || 'Todos los estados'}</Text>
           </TouchableOpacity>
 
-          <TextInput
-            placeholder="Desde (YYYY-MM-DD)"
-            value={desde}
-            onChangeText={setDesde}
-            style={styles.input}
-            placeholderTextColor="#94a3b8"
-          />
-          <TextInput
-            placeholder="Hasta (YYYY-MM-DD)"
-            value={hasta}
-            onChangeText={setHasta}
-            style={styles.input}
-            placeholderTextColor="#94a3b8"
-          />
+          <TextInput placeholder="Desde (YYYY-MM-DD)" value={desde} onChangeText={setDesde} style={styles.input} placeholderTextColor="#94a3b8" />
+          <TextInput placeholder="Hasta (YYYY-MM-DD)" value={hasta} onChangeText={setHasta} style={styles.input} placeholderTextColor="#94a3b8" />
 
           <View style={styles.filaBtns}>
             <TouchableOpacity onPress={cargarListado} disabled={cargando} style={[styles.btn, styles.btnPrimario, cargando && { opacity: 0.7 }]}>
@@ -347,9 +303,7 @@ export default function CotizacionesSuperadmin() {
           contentContainerStyle={{ paddingBottom: 120 }}
           keyboardShouldPersistTaps="handled"
         >
-          {!listado.length && (
-            <Text style={styles.empty}>No hay resultados</Text>
-          )}
+          {!listado.length && (<Text style={styles.empty}>No hay resultados</Text>)}
           {listado.map((r) => {
             const color = ESTADO_COLOR[r.estado]
             return (
@@ -358,10 +312,7 @@ export default function CotizacionesSuperadmin() {
                   <Text style={styles.num}>#{String(r.numero).padStart(6, '0')}</Text>
                   <TouchableOpacity
                     onPress={() => abrirSelectorEstado(r)}
-                    style={[
-                      styles.estadoChip,
-                      { backgroundColor: color.bg, borderColor: color.border },
-                    ]}
+                    style={[styles.estadoChip, { backgroundColor: color.bg, borderColor: color.border }]}
                   >
                     <Text style={[styles.estadoText, { color: color.text }]}>{r.estado}</Text>
                   </TouchableOpacity>
@@ -371,17 +322,11 @@ export default function CotizacionesSuperadmin() {
                 <Text style={styles.desc}>{r.descripcion ?? '—'}</Text>
 
                 <View style={styles.grid2}>
-                  <Text style={styles.meta}>
-                    Monto: <Text style={styles.bold}>{formatMoney(r.monto)}</Text>
-                  </Text>
-                  <Text style={styles.meta}>
-                    Fecha: <Text style={styles.bold}>{formatDate(r.fecha)}</Text>
-                  </Text>
+                  <Text style={styles.meta}>Monto: <Text style={styles.bold}>{formatMoney(r.monto)}</Text></Text>
+                  <Text style={styles.meta}>Fecha: <Text style={styles.bold}>{formatDate(r.fecha)}</Text></Text>
                 </View>
 
-                <Text style={styles.meta}>
-                  Subida por: <Text style={styles.bold}>{nombreFM(r.usuarios)}</Text>
-                </Text>
+                <Text style={styles.meta}>Subida por: <Text style={styles.bold}>{nombreFM(r.usuarios)}</Text></Text>
 
                 <View style={styles.actions}>
                   <TouchableOpacity
@@ -402,91 +347,59 @@ export default function CotizacionesSuperadmin() {
 }
 
 const styles = StyleSheet.create({
-  // Safe area + “bajar” el inicio del contenido
-  safe: {
-    flex: 1,
-    backgroundColor: '#f1f5f9',
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 8 : 8,
+  safe: { flex: 1, backgroundColor: '#f1f5f9' },
+
+  headerRow: {
+    paddingHorizontal: 16,
+    paddingTop: 40,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
+  btnBack: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#6b7280',
+    paddingHorizontal: 14,
+    height: 40,
+    borderRadius: 10,
+  },
+  btnBackText: { color: '#fff', fontWeight: '700', marginLeft: 4 },
 
   wrap: { flex: 1, paddingHorizontal: 16, backgroundColor: '#f1f5f9' },
   title: { fontSize: 18, fontWeight: '700', color: '#0f172a', marginBottom: 12 },
 
-  // Filtros
   filtros: { gap: 8, marginBottom: 12 },
   input: {
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    backgroundColor: '#fff',
+    borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#fff',
   },
   inputText: { color: '#0f172a' },
 
   fmPicker: {
     borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 10, backgroundColor: '#fff', marginTop: 6,
   },
-  fmItem: {
-    paddingHorizontal: 12, paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e2e8f0',
-  },
+  fmItem: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e2e8f0' },
 
-  // Sugerencias cliente
   suggestBox: {
-    position: 'absolute',
-    top: 52,
-    left: 0,
-    right: 0,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 10,
-    zIndex: 50,
+    position: 'absolute', top: 52, left: 0, right: 0, backgroundColor: '#fff',
+    borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 10, zIndex: 50,
   },
-  suggestItem: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e2e8f0',
-  },
+  suggestItem: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e2e8f0' },
 
   filaBtns: { flexDirection: 'row', gap: 10 },
-  btn: {
-    flex: 1,
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  btn: { flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' },
   btnPrimario: { backgroundColor: '#2563EB' },
-  btnSecundario: {
-    backgroundColor: '#e2e8f0',
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-  },
+  btnSecundario: { backgroundColor: '#e2e8f0', borderWidth: 1, borderColor: '#cbd5e1' },
   btnText: { fontWeight: '700', color: '#0f172a' },
 
   empty: { textAlign: 'center', color: '#64748b', paddingVertical: 16 },
 
-  // Cards
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    padding: 14,
-    marginBottom: 12,
-  },
+  card: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e2e8f0', padding: 14, marginBottom: 12 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   num: { fontWeight: '800', color: '#0f172a' },
 
-  estadoChip: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
+  estadoChip: { borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 },
   estadoText: { fontWeight: '700' },
 
   cliente: { fontWeight: '700', color: '#0f172a', marginBottom: 2, fontSize: 16 },
@@ -494,15 +407,7 @@ const styles = StyleSheet.create({
   grid2: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
   meta: { color: '#475569', marginBottom: 2 },
   bold: { fontWeight: '700', color: '#0f172a' },
-
   actions: { marginTop: 10, flexDirection: 'row', gap: 8 },
-  linkBtn: {
-    backgroundColor: '#f1f5f9',
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
+  linkBtn: { backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
   linkBtnText: { fontWeight: '700', color: '#0f172a' },
 })

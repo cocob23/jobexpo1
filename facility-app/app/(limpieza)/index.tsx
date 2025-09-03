@@ -33,7 +33,7 @@ export default function InicioLimpieza() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F8FAFC' },
   container: { padding: 24, alignItems: 'center', gap: 14 },
-  logo: { width: 200, height: 70, resizeMode: 'contain', marginTop: 100, marginBottom: 70},
+  logo: { width: 300, height: 105, resizeMode: 'contain', marginTop: 100, marginBottom: 70},
   titulo: { fontSize: 20, fontWeight: '700', color: '#0F172A', marginBottom: 50 },
   botonGrande: {
     width: '100%',

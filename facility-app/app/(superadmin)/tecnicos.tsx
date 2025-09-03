@@ -1,18 +1,20 @@
+// (tu ruta) ListaTecnicos.tsx
 import { supabase } from '@/constants/supabase'
 import { router } from 'expo-router'
 import { useEffect, useState } from 'react'
 import {
   ActivityIndicator,
-  Platform,
   SafeAreaView,
   ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
+  Platform,
+  StatusBar,
 } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 
 export default function ListaTecnicos() {
   const [tecnicos, setTecnicos] = useState<any[]>([])
@@ -21,28 +23,20 @@ export default function ListaTecnicos() {
   const [cargando, setCargando] = useState(true)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  useEffect(() => {
-    obtenerTecnicos()
-  }, [])
+  useEffect(() => { obtenerTecnicos() }, [])
 
   const obtenerTecnicos = async () => {
-    setCargando(true)
-    setErrorMsg(null)
-
+    setCargando(true); setErrorMsg(null)
     const { data, error } = await supabase
       .from('usuarios')
       .select('id, nombre, apellido, rol')
       .in('rol', ['mantenimiento', 'mantenimiento-externo'])
 
     if (error) {
-      setErrorMsg('No se pudieron cargar los técnicos.')
-      setTecnicos([])
-      setFiltrados([])
+      setErrorMsg('No se pudieron cargar los técnicos.'); setTecnicos([]); setFiltrados([])
     } else {
-      setTecnicos(data || [])
-      setFiltrados(data || [])
+      setTecnicos(data || []); setFiltrados(data || [])
     }
-
     setCargando(false)
   }
 
@@ -58,6 +52,14 @@ export default function ListaTecnicos() {
 
   return (
     <SafeAreaView style={styles.safe}>
+      {/* Header Back */}
+      <View style={styles.headerRow}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.btnBack}>
+          <Ionicons name="chevron-back" size={20} color="#fff" />
+          <Text style={styles.btnBackText}>Volver</Text>
+        </TouchableOpacity>
+      </View>
+
       <ScrollView
         style={styles.container}
         contentContainerStyle={{ paddingBottom: 120 }}
@@ -106,31 +108,33 @@ export default function ListaTecnicos() {
 }
 
 const styles = StyleSheet.create({
-  // Safe area + separación para notch
   safe: {
     flex: 1,
     backgroundColor: '#fff',
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 8 : 8,
   },
-  container: {
-    flex: 1,
+
+  headerRow: {
     paddingHorizontal: 24,
-    backgroundColor: '#fff',
+    paddingTop: 40,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  titulo: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    color: '#0f172a',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
+  btnBack: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#6b7280',
+    paddingHorizontal: 14,
+    height: 40,
     borderRadius: 10,
-    padding: 12,
-    marginBottom: 16,
-    backgroundColor: '#fff',
   },
+  btnBackText: { color: '#fff', fontWeight: '700', marginLeft: 4 },
+
+  container: { flex: 1, paddingHorizontal: 24, backgroundColor: '#fff' },
+  titulo: { fontSize: 22, fontWeight: 'bold', marginBottom: 20, color: '#0f172a' },
+  input: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 10, padding: 12, marginBottom: 16, backgroundColor: '#fff' },
   card: {
     backgroundColor: '#f3f4f6',
     padding: 16,
@@ -139,13 +143,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
-  cardNombre: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1e40af',
-  },
-  cardRol: {
-    marginTop: 4,
-    color: '#475569',
-  },
+  cardNombre: { fontSize: 16, fontWeight: 'bold', color: '#1e40af' },
+  cardRol: { marginTop: 4, color: '#475569' },
 })

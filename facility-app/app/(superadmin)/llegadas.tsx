@@ -4,6 +4,9 @@ import {
   View, Text, FlatList, StyleSheet, RefreshControl,
   TouchableOpacity, ActivityIndicator, TextInput, Platform
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { Ionicons } from '@expo/vector-icons'
+import { useRouter } from 'expo-router'
 import DateTimePicker from '@react-native-community/datetimepicker'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
@@ -14,8 +17,8 @@ dayjs.locale('es')
 type Llegada = {
   id: string
   usuario_id: string
-  fecha: string            // en DB: DATE o TIMESTAMP (guardamos como string YYYY-MM-DD si es DATE)
-  hora: string             // "HH:mm" o similar
+  fecha: string
+  hora: string
   lugar: string | null
   latitud?: number | null
   longitud?: number | null
@@ -24,6 +27,7 @@ type Llegada = {
 type Usuario = { id: string; nombre: string; apellido: string }
 
 export default function LlegadasFM() {
+  const router = useRouter()
   const [items, setItems] = useState<Llegada[]>([])
   const [empleadasMap, setEmpleadasMap] = useState<Record<string, Usuario>>({})
   const [loading, setLoading] = useState(true)
@@ -42,7 +46,7 @@ export default function LlegadasFM() {
     const ch = supabase
       .channel('llegadas-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'llegadas' }, () => {
-        fetchLlegadas(false) // refresco silencioso
+        fetchLlegadas(false)
       })
       .subscribe()
 
@@ -58,18 +62,15 @@ export default function LlegadasFM() {
         .from('llegadas')
         .select('id, usuario_id, fecha, hora, lugar, latitud, longitud')
 
-      // Filtrado por fecha (si `fecha` es DATE, eq matchea perfecto)
       if (selectedDate) {
         const dateStr = dayjs(selectedDate).format('YYYY-MM-DD')
         query = query.eq('fecha', dateStr)
       }
 
-      // Filtro por lugar (server-side)
       if (lugar.trim()) {
         query = query.ilike('lugar', `%${lugar.trim()}%`)
       }
 
-      // Siempre ordenar de más reciente a más viejo
       query = query
         .order('fecha', { ascending: false })
         .order('hora', { ascending: false })
@@ -80,7 +81,6 @@ export default function LlegadasFM() {
       const llegadas = (data || []) as Llegada[]
       setItems(llegadas)
 
-      // Traer nombres de las empleadas
       const ids = Array.from(new Set(llegadas.map(l => l.usuario_id)))
       if (ids.length) {
         const { data: usrs, error: uerr } = await supabase
@@ -107,7 +107,6 @@ export default function LlegadasFM() {
     await fetchLlegadas()
   }
 
-  // Filtro por nombre/apellido (client-side)
   const dataRender = useMemo(() => {
     const q = buscar.trim().toLowerCase()
     if (!q) return items
@@ -145,111 +144,124 @@ export default function LlegadasFM() {
   const clearDate = () => setSelectedDate(null)
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Llegadas de Limpieza</Text>
-
-      <View style={styles.filters}>
-        {/* Selector de fecha */}
-        <View style={[styles.inputWrap, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.label}>Fecha</Text>
-            <TouchableOpacity onPress={openPicker} style={styles.dateBtn}>
-              <Text style={styles.dateBtnText}>
-                {selectedDate ? dayjs(selectedDate).format('YYYY-MM-DD') : 'Todas'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {selectedDate && (
-            <TouchableOpacity onPress={clearDate} style={styles.clearBtn}>
-              <Text style={styles.clearBtnText}>Quitar</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* Lugar (server-side) */}
-        <View style={styles.inputWrap}>
-          <Text style={styles.label}>Lugar</Text>
-          <TextInput
-            value={lugar}
-            onChangeText={setLugar}
-            placeholder="Filtrar por lugar"
-            style={styles.input}
-            autoCapitalize="none"
-          />
-        </View>
-
-        {/* Buscar por nombre (client-side) */}
-        <View style={styles.inputWrapFull}>
-          <Text style={styles.label}>Buscar empleado</Text>
-          <TextInput
-            value={buscar}
-            onChangeText={setBuscar}
-            placeholder="Nombre o apellido"
-            style={styles.input}
-            autoCapitalize="none"
-          />
-        </View>
-
-        <TouchableOpacity style={styles.refreshBtn} onPress={() => fetchLlegadas()}>
-          <Text style={styles.refreshText}>Aplicar</Text>
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      {/* Header Back */}
+      <View style={styles.headerRow}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.btnBack}>
+          <Ionicons name="chevron-back" size={20} color="#fff" />
+          <Text style={styles.btnBackText}>Volver</Text>
         </TouchableOpacity>
       </View>
 
-{showPicker && (
-  <View style={{ backgroundColor: '#fff', borderRadius: 8, padding: 10 }}>
-    <DateTimePicker
-      value={selectedDate ?? new Date()}
-      mode="date"
-      display={Platform.OS === 'ios' ? 'inline' : 'spinner'}
-      onChange={(_, d) => {
-        if (Platform.OS === 'android') {
-          setShowPicker(false)
-          if (d) setSelectedDate(d)
-        } else {
-          if (d) setSelectedDate(d)
-        }
-      }}
-      themeVariant="light"
-    />
+      <View style={styles.container}>
+        <Text style={styles.title}>Llegadas de Limpieza</Text>
 
-    {/* Botón Cancelar */}
-    <TouchableOpacity
-      onPress={() => setShowPicker(false)}
-      style={{
-        marginTop: 10,
-        backgroundColor: '#ef4444',
-        paddingVertical: 8,
-        borderRadius: 6
-      }}
-    >
-      <Text style={{ color: '#fff', textAlign: 'center', fontWeight: '600' }}>
-        Cancelar
-      </Text>
-    </TouchableOpacity>
-  </View>
-)}
+        <View style={styles.filters}>
+          {/* Selector de fecha */}
+          <View style={[styles.inputWrap, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.label}>Fecha</Text>
+              <TouchableOpacity onPress={openPicker} style={styles.dateBtn}>
+                <Text style={styles.dateBtnText}>
+                  {selectedDate ? dayjs(selectedDate).format('YYYY-MM-DD') : 'Todas'}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
+            {selectedDate && (
+              <TouchableOpacity onPress={clearDate} style={styles.clearBtn}>
+                <Text style={styles.clearBtnText}>Quitar</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
-      {loading ? (
-        <ActivityIndicator />
-      ) : (
-        <FlatList
-          data={dataRender}
-          keyExtractor={(it) => it.id}
-          renderItem={renderItem}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#6b7280' }}>No hay llegadas para ese filtro.</Text>}
-          contentContainerStyle={{ paddingBottom: 40 }}
-          keyboardShouldPersistTaps="handled"
-        />
-      )}
-    </View>
+          {/* Lugar (server-side) */}
+          <View style={styles.inputWrap}>
+            <Text style={styles.label}>Lugar</Text>
+            <TextInput
+              value={lugar}
+              onChangeText={setLugar}
+              placeholder="Filtrar por lugar"
+              style={styles.input}
+              autoCapitalize="none"
+            />
+          </View>
+
+          {/* Buscar por nombre (client-side) */}
+          <View style={styles.inputWrapFull}>
+            <Text style={styles.label}>Buscar empleado</Text>
+            <TextInput
+              value={buscar}
+              onChangeText={setBuscar}
+              placeholder="Nombre o apellido"
+              style={styles.input}
+              autoCapitalize="none"
+            />
+          </View>
+
+          <TouchableOpacity style={styles.refreshBtn} onPress={() => fetchLlegadas()}>
+            <Text style={styles.refreshText}>Aplicar</Text>
+          </TouchableOpacity>
+        </View>
+
+        {showPicker && (
+          <View style={{ backgroundColor: '#fff', borderRadius: 8, padding: 10 }}>
+            <DateTimePicker
+              value={selectedDate ?? new Date()}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'inline' : 'spinner'}
+              onChange={(_, d) => {
+                if (Platform.OS === 'android') {
+                  setShowPicker(false)
+                  if (d) setSelectedDate(d)
+                } else {
+                  if (d) setSelectedDate(d)
+                }
+              }}
+              themeVariant="light"
+            />
+
+            <TouchableOpacity
+              onPress={() => setShowPicker(false)}
+              style={{ marginTop: 10, backgroundColor: '#ef4444', paddingVertical: 8, borderRadius: 6 }}
+            >
+              <Text style={{ color: '#fff', textAlign: 'center', fontWeight: '600' }}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {loading ? (
+          <ActivityIndicator />
+        ) : (
+          <FlatList
+            data={dataRender}
+            keyExtractor={(it) => it.id}
+            renderItem={renderItem}
+            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+            ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#6b7280' }}>No hay llegadas para ese filtro.</Text>}
+            contentContainerStyle={{ paddingBottom: 40 }}
+            keyboardShouldPersistTaps="handled"
+          />
+        )}
+      </View>
+    </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', padding: 16, paddingTop: 50 },
+  safe: { flex: 1, backgroundColor: '#fff' },
+  headerRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 40 }, // 👈 margen 40
+  btnBack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#6b7280',
+    paddingHorizontal: 14,
+    height: 40,
+    borderRadius: 10,
+  },
+  btnBackText: { color: '#fff', fontWeight: '700', marginLeft: 4 },
+
+  container: { flex: 1, backgroundColor: '#fff', padding: 16, paddingTop: 50 }, // ya tenía 50, lo mantengo
   title: { fontSize: 20, fontWeight: 'bold', marginBottom: 12 },
   filters: { flexDirection: 'row', gap: 8, alignItems: 'flex-end', marginBottom: 12, flexWrap: 'wrap' },
   inputWrap: { width: '47%' },
@@ -265,11 +277,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#f3f4f6',
   },
-  dateBtnText: {
-    color: '#111827',
-    fontWeight: '600',
-    fontSize: 14,
-  },
+  dateBtnText: { color: '#111827', fontWeight: '600', fontSize: 14 },
   clearBtn: { backgroundColor: '#ef4444', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, alignSelf: 'flex-end' },
   clearBtnText: { color: '#fff', fontWeight: '700' },
   refreshBtn: { backgroundColor: '#1e40af', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12 },

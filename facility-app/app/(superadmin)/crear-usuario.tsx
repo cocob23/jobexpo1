@@ -1,3 +1,4 @@
+// (tu ruta) CrearUsuarioScreen.tsx
 import { useState } from 'react'
 import {
   Alert,
@@ -7,6 +8,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { useRouter } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 import { supabaseAdmin } from '../../constants/supabaseAdmin'
 
 type RolValue =
@@ -16,10 +20,7 @@ type RolValue =
   | 'fm'
   | 'superadmin'
 
-type Rol = {
-  value: RolValue
-  label: string
-}
+type Rol = { value: RolValue; label: string }
 
 const rolesDisponibles: Rol[] = [
   { value: 'limpieza',              label: 'Limpieza' },
@@ -30,6 +31,7 @@ const rolesDisponibles: Rol[] = [
 ]
 
 export default function CrearUsuarioScreen() {
+  const router = useRouter()
   const [nombre, setNombre] = useState('')
   const [apellido, setApellido] = useState('')
   const [email, setEmail] = useState('')
@@ -63,146 +65,83 @@ export default function CrearUsuarioScreen() {
       email: emailLimpio,
       nombre,
       apellido,
-      rol, // ahora solo acepta RolValue válidos
+      rol,
     })
 
     if (insertError) {
       Alert.alert('Error al guardar en tabla usuarios', insertError.message)
     } else {
       Alert.alert('Usuario creado con éxito')
-      setNombre('')
-      setApellido('')
-      setEmail('')
-      setPassword('')
-      setRol('limpieza')
+      setNombre(''); setApellido(''); setEmail(''); setPassword(''); setRol('limpieza')
     }
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.titulo}>Crear nuevo usuario</Text>
-
-      <TextInput
-        placeholder="Nombre"
-        value={nombre}
-        placeholderTextColor="#999"
-        onChangeText={setNombre}
-        style={styles.input}
-      />
-
-      <TextInput
-        placeholder="Apellido"
-        value={apellido}
-        placeholderTextColor="#999"
-        onChangeText={setApellido}
-        style={styles.input}
-      />
-
-      <TextInput
-        placeholder="Email"
-        value={email}
-        placeholderTextColor="#999"
-        onChangeText={setEmail}
-        autoCapitalize="none"
-        keyboardType="email-address"
-        style={styles.input}
-      />
-
-      <TextInput
-        placeholder="Contraseña"
-        value={password}
-        placeholderTextColor="#999"
-        onChangeText={setPassword}
-        secureTextEntry
-        style={styles.input}
-        textContentType="password"
-      />
-
-      <Text style={styles.label}>Seleccioná un rol:</Text>
-      <View style={styles.rolesContainer}>
-        {rolesDisponibles.map((r) => (
-          <TouchableOpacity
-            key={r.value}
-            onPress={() => setRol(r.value)}
-            style={[styles.rolBoton, rol === r.value && styles.rolSeleccionado]}
-          >
-            <Text
-              style={[styles.rolTexto, rol === r.value && styles.rolTextoSeleccionado]}
-            >
-              {r.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }} edges={['top']}>
+      {/* Header Back (compacto) */}
+      <View style={{ paddingHorizontal: 24, paddingTop: 40, marginBottom: 8, flexDirection: 'row', alignItems: 'center' }}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.btnBack}>
+          <Ionicons name="chevron-back" size={20} color="#fff" />
+          <Text style={styles.btnBackText}>Volver</Text>
+        </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.boton} onPress={crearUsuario}>
-        <Text style={styles.botonTexto}>Crear usuario</Text>
-      </TouchableOpacity>
-    </View>
+      <View style={styles.container}>
+        <Text style={styles.titulo}>Crear nuevo usuario</Text>
+
+        <TextInput placeholder="Nombre" value={nombre} placeholderTextColor="#999" onChangeText={setNombre} style={styles.input} />
+        <TextInput placeholder="Apellido" value={apellido} placeholderTextColor="#999" onChangeText={setApellido} style={styles.input} />
+        <TextInput placeholder="Email" value={email} placeholderTextColor="#999" onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" style={styles.input} />
+        <TextInput placeholder="Contraseña" value={password} placeholderTextColor="#999" onChangeText={setPassword} secureTextEntry style={styles.input} textContentType="password" />
+
+        <Text style={styles.label}>Seleccioná un rol:</Text>
+        <View style={styles.rolesContainer}>
+          {rolesDisponibles.map((r) => (
+            <TouchableOpacity
+              key={r.value}
+              onPress={() => setRol(r.value)}
+              style={[styles.rolBoton, rol === r.value && styles.rolSeleccionado]}
+            >
+              <Text style={[styles.rolTexto, rol === r.value && styles.rolTextoSeleccionado]}>
+                {r.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <TouchableOpacity style={styles.boton} onPress={crearUsuario}>
+          <Text style={styles.botonTexto}>Crear usuario</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 24,
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-  },
-  titulo: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 14,
-  },
-  label: {
-    fontSize: 14,
-    marginBottom: 8,
-    fontWeight: 'bold',
-  },
-  rolesContainer: {
+  btnBack: {
+    alignSelf: 'flex-start',
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 20,
-  },
-  rolBoton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#2563EB',
-    backgroundColor: '#fff',
-    marginRight: 10,
-    marginBottom: 10,
-  },
-  rolSeleccionado: {
-    backgroundColor: '#2563EB',
-  },
-  rolTexto: {
-    color: '#2563EB',
-    fontWeight: 'bold',
-    textTransform: 'capitalize',
-  },
-  rolTextoSeleccionado: {
-    color: '#fff',
-  },
-  boton: {
-    backgroundColor: '#2563EB',
-    padding: 14,
-    borderRadius: 12,
     alignItems: 'center',
-    marginTop: 12,
+    backgroundColor: '#6b7280',
+    paddingHorizontal: 14,
+    height: 40,
+    borderRadius: 10,
   },
-  botonTexto: {
-    color: '#fff',
-    fontWeight: 'bold',
+  btnBackText: { color: '#fff', fontWeight: '700', marginLeft: 4 },
+
+  container: { flex: 1, padding: 24, backgroundColor: '#fff' },
+  titulo: { fontSize: 22, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
+  input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 12, padding: 12, marginBottom: 14 },
+  label: { fontSize: 14, marginBottom: 8, fontWeight: 'bold' },
+  rolesContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 20 },
+  rolBoton: {
+    paddingVertical: 8, paddingHorizontal: 12,
+    borderRadius: 8, borderWidth: 1, borderColor: '#2563EB', backgroundColor: '#fff',
+    marginRight: 10, marginBottom: 10,
   },
+  rolSeleccionado: { backgroundColor: '#2563EB' },
+  rolTexto: { color: '#2563EB', fontWeight: 'bold', textTransform: 'capitalize' },
+  rolTextoSeleccionado: { color: '#fff' },
+  boton: { backgroundColor: '#2563EB', padding: 14, borderRadius: 12, alignItems: 'center', marginTop: 12 },
+  botonTexto: { color: '#fff', fontWeight: 'bold' },
 })

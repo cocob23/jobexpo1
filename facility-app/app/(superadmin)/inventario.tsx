@@ -1,3 +1,4 @@
+// (tu ruta) AsignarInventario.tsx
 import { supabase } from '@/constants/supabase'
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -5,8 +6,6 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
-  StatusBar,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,8 +13,12 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { useRouter } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 
 export default function AsignarInventario() {
+  const router = useRouter()
   const [tipo, setTipo] = useState<'herramienta' | 'vestimenta'>('herramienta')
   const [descripcion, setDescripcion] = useState('')
   const [cantidad, setCantidad] = useState('')
@@ -43,7 +46,6 @@ export default function AsignarInventario() {
     cargarUsuarios()
   }, [])
 
-  // Filtrado por nombre/apellido/email
   const usuariosFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
     if (!q) return usuarios
@@ -52,12 +54,7 @@ export default function AsignarInventario() {
       const apellido = (u.apellido ?? '').toLowerCase()
       const email = (u.email ?? '').toLowerCase()
       const full = `${apellido} ${nombre}`.trim()
-      return (
-        nombre.includes(q) ||
-        apellido.includes(q) ||
-        email.includes(q) ||
-        full.includes(q)
-      )
+      return nombre.includes(q) || apellido.includes(q) || email.includes(q) || full.includes(q)
     })
   }, [usuarios, busqueda])
 
@@ -72,27 +69,19 @@ export default function AsignarInventario() {
       return
     }
     const { error } = await supabase.from('inventario').insert([
-      {
-        usuario_id: usuarioSeleccionado.id,
-        tipo,
-        descripcion,
-        cantidad: cantidadNum,
-      },
+      { usuario_id: usuarioSeleccionado.id, tipo, descripcion, cantidad: cantidadNum },
     ])
     if (error) {
       Alert.alert('Error al asignar inventario')
     } else {
       Alert.alert('Inventario asignado con éxito')
-      setDescripcion('')
-      setCantidad('')
-      setUsuarioSeleccionado(null)
-      setBusqueda('')
+      setDescripcion(''); setCantidad(''); setUsuarioSeleccionado(null); setBusqueda('')
     }
   }
 
   if (cargando) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.loader}>
           <ActivityIndicator size="large" color="#1e40af" />
         </View>
@@ -101,12 +90,16 @@ export default function AsignarInventario() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
-      >
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      {/* Header Back */}
+      <View style={styles.headerRow}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.btnBack}>
+          <Ionicons name="chevron-back" size={20} color="#fff" />
+          <Text style={styles.btnBackText}>Volver</Text>
+        </TouchableOpacity>
+      </View>
+
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           style={styles.container}
           contentContainerStyle={{ paddingBottom: 120 }}
@@ -162,12 +155,8 @@ export default function AsignarInventario() {
             placeholderTextColor="#94a3b8"
           />
 
-          {/* Caja reducida y scrolleable para usuarios */}
           <View style={styles.userBox}>
-            <ScrollView
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{ paddingVertical: 6 }}
-            >
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingVertical: 6 }}>
               {usuariosFiltrados.length ? (
                 usuariosFiltrados.map((item) => (
                   <TouchableOpacity
@@ -215,29 +204,33 @@ export default function AsignarInventario() {
 }
 
 const styles = StyleSheet.create({
-  // baja el contenido para que no lo tape el notch
-  safe: {
-    flex: 1,
-    backgroundColor: '#fff',
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 8 : 8,
+  safe: { flex: 1, backgroundColor: '#fff' },
+
+  headerRow: {
+    paddingHorizontal: 24,
+    paddingTop: 40,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
+  btnBack: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#6b7280',
+    paddingHorizontal: 14,
+    height: 40,
+    borderRadius: 10,
+  },
+  btnBackText: { color: '#fff', fontWeight: '700', marginLeft: 4 },
+
   loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
 
-  container: {
-    flex: 1,
-    paddingHorizontal: 24,
-    backgroundColor: '#fff',
-  },
-  titulo: {
-    fontSize: 22, fontWeight: 'bold', marginBottom: 16, color: '#0f172a',
-  },
-  label: {
-    fontSize: 14, marginTop: 16, marginBottom: 6, color: '#475569', fontWeight: '600',
-  },
-  input: {
-    borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#fff',
-  },
+  container: { flex: 1, paddingHorizontal: 24, backgroundColor: '#fff' },
+  titulo: { fontSize: 22, fontWeight: 'bold', marginBottom: 16, color: '#0f172a' },
+
+  label: { fontSize: 14, marginTop: 16, marginBottom: 6, color: '#475569', fontWeight: '600' },
+  input: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, backgroundColor: '#fff' },
 
   tipoContainer: { flexDirection: 'row', gap: 10 },
   tipoBoton: {
@@ -248,33 +241,13 @@ const styles = StyleSheet.create({
   tipoTexto: { fontWeight: '700', color: '#fff' },
   tipoTextoInactivo: { color: '#1e3a8a' },
 
-  // Caja de usuarios: cuadrado reducido, con scroll interno
-  userBox: {
-    maxHeight: 220,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    overflow: 'hidden',
-    backgroundColor: '#fff',
-  },
-  usuarioItem: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#fff',
-  },
+  userBox: { maxHeight: 220, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, overflow: 'hidden', backgroundColor: '#fff' },
+  usuarioItem: { paddingVertical: 10, paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: '#e5e7eb', backgroundColor: '#fff' },
   usuarioNombre: { color: '#0f172a', fontWeight: '600' },
   usuarioEmail: { color: '#64748b', fontSize: 12 },
   usuarioActivo: { backgroundColor: '#dbeafe' },
 
-  selBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 10,
-    paddingVertical: 6,
-  },
+  selBadge: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, paddingVertical: 6 },
   selBadgeText: { color: '#0f172a', fontWeight: '600' },
   selBadgeClear: { color: '#dc2626', fontWeight: '700' },
 

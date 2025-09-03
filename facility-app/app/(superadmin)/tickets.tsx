@@ -1,3 +1,4 @@
+// app/(superadmin)/tickets.tsx
 import { supabase } from '@/constants/supabase'
 import { useEffect, useState } from 'react'
 import {
@@ -7,16 +8,17 @@ import {
   Image,
   Modal,
   Pressable,
-  SafeAreaView,
-  Platform,
-  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { useRouter } from 'expo-router'
+import { Ionicons } from '@expo/vector-icons'
 
 export default function TicketsSuperadmin() {
+  const router = useRouter()
   const [tickets, setTickets] = useState<any[]>([])
   const [cargando, setCargando] = useState(true)
   const [imagenSeleccionada, setImagenSeleccionada] = useState<string | null>(null)
@@ -120,7 +122,7 @@ export default function TicketsSuperadmin() {
 
   if (cargando) {
     return (
-      <SafeAreaView style={styles.safe}>
+      <SafeAreaView style={styles.safe} edges={['top']}>
         <View style={styles.loader}>
           <ActivityIndicator size="large" color="#1e40af" />
         </View>
@@ -129,7 +131,15 @@ export default function TicketsSuperadmin() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      {/* Header Back (compacto, arriba a la izquierda) */}
+      <View style={styles.headerRow}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.btnBack}>
+          <Ionicons name="chevron-back" size={20} color="#fff" />
+          <Text style={styles.btnBackText}>Volver</Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.container}>
         <Text style={styles.titulo}>Tickets cargados</Text>
 
@@ -162,22 +172,33 @@ export default function TicketsSuperadmin() {
 }
 
 const styles = StyleSheet.create({
-  // Safe area + separación para notch
-  safe: {
-    flex: 1,
-    backgroundColor: '#fff',
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 8 : 8,
+  safe: { flex: 1, backgroundColor: '#fff' },
+
+  headerRow: {
+    paddingHorizontal: 20,
+    paddingTop: 40,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
+  btnBack: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#6b7280',
+    paddingHorizontal: 14,
+    height: 40,
+    borderRadius: 10,
+  },
+  btnBackText: { color: '#fff', fontWeight: '700', marginLeft: 4 },
+
   container: {
     flex: 1,
     paddingHorizontal: 20,
     backgroundColor: '#fff',
   },
-  titulo: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginBottom: 16,
-  },
+  titulo: { fontSize: 24, fontWeight: 'bold', marginBottom: 16 },
+
   card: {
     borderWidth: 1,
     borderColor: '#ccc',
@@ -192,62 +213,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 12,
   },
-  imagenExpandida: {
-    width: '100%',
-    height: '100%',
-  },
+  imagenExpandida: { width: '100%', height: '100%' },
   modalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.8)',
+    justifyContent: 'center', alignItems: 'center',
   },
-  modalBackground: {
-    flex: 1,
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  label: {
-    fontWeight: 'bold',
-    marginTop: 8,
-  },
-  valor: {
-    fontSize: 15,
-  },
-  botones: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 12,
-  },
-  boton: {
-    flex: 1,
-    padding: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginHorizontal: 5,
-  },
-  aprobar: {
-    backgroundColor: '#16a34a',
-  },
-  desaprobar: {
-    backgroundColor: '#dc2626',
-  },
-  botonTexto: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  loader: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  estadoTexto: {
-    fontSize: 15,
-    fontWeight: 'bold',
-    textTransform: 'capitalize',
-    marginTop: 4,
-  },
+  modalBackground: { flex: 1, width: '100%', justifyContent: 'center', alignItems: 'center' },
+  label: { fontWeight: 'bold', marginTop: 8 },
+  valor: { fontSize: 15 },
+  botones: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 12 },
+  boton: { flex: 1, padding: 10, borderRadius: 8, alignItems: 'center', marginHorizontal: 5 },
+  aprobar: { backgroundColor: '#16a34a' },
+  desaprobar: { backgroundColor: '#dc2626' },
+  botonTexto: { color: '#fff', fontWeight: 'bold' },
+  loader: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  estadoTexto: { fontSize: 15, fontWeight: 'bold', textTransform: 'capitalize', marginTop: 4 },
   estadoAprobado: { color: 'green' },
   estadoDesaprobado: { color: 'red' },
   estadoPendiente: { color: '#ca8a04' },

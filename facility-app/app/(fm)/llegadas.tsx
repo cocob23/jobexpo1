@@ -1,13 +1,15 @@
 // app/(fm)/llegadas.tsx
 import { useEffect, useMemo, useState } from 'react'
 import {
-  View, Text, FlatList, StyleSheet, RefreshControl,
-  TouchableOpacity, ActivityIndicator, TextInput, Platform, Linking, ScrollView
+  View, Text, FlatList, StyleSheet, RefreshControl, TextInput,
+  TouchableOpacity, ActivityIndicator, Platform, Linking, ScrollView
 } from 'react-native'
 import DateTimePicker from '@react-native-community/datetimepicker'
 import MapView, { Marker } from 'react-native-maps'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
+import { Ionicons } from '@expo/vector-icons'
+import { useRouter } from 'expo-router'
 import { supabase } from '@/constants/supabase'
 
 dayjs.locale('es')
@@ -15,8 +17,8 @@ dayjs.locale('es')
 type Llegada = {
   id: string
   usuario_id: string
-  fecha: string            // YYYY-MM-DD si es DATE
-  hora: string             // "HH:mm"
+  fecha: string
+  hora: string
   lugar: string | null
   latitud?: number | null
   longitud?: number | null
@@ -26,13 +28,14 @@ type Usuario = { id: string; nombre: string; apellido: string }
 type Empresa = { id: string; nombre: string }
 
 export default function LlegadasFM() {
+  const router = useRouter()
   const [items, setItems] = useState<Llegada[]>([])
   const [empleadasMap, setEmpleadasMap] = useState<Record<string, Usuario>>({})
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
 
   // filtros
-  const [selectedDate, setSelectedDate] = useState<Date | null>(null) // null = sin filtro
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [showPicker, setShowPicker] = useState(false)
   const [lugar, setLugar] = useState<string>('')
   const [buscar, setBuscar] = useState<string>('')
@@ -42,7 +45,6 @@ export default function LlegadasFM() {
   const [sugerencias, setSugerencias] = useState<Empresa[]>([])
 
   useEffect(() => {
-    // cargar empresas para sugerencias
     ;(async () => {
       const { data, error } = await supabase
         .from('empresas')
@@ -54,15 +56,12 @@ export default function LlegadasFM() {
 
   useEffect(() => {
     fetchLlegadas()
-
-    // realtime
     const ch = supabase
       .channel('llegadas-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'llegadas' }, () => {
-        fetchLlegadas(false) // refresco silencioso
+        fetchLlegadas(false)
       })
       .subscribe()
-
     return () => { supabase.removeChannel(ch) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDate, lugar])
@@ -70,26 +69,17 @@ export default function LlegadasFM() {
   const fetchLlegadas = async (showSpinner = true) => {
     try {
       if (showSpinner) setLoading(true)
-
       let query = supabase
         .from('llegadas')
         .select('id, usuario_id, fecha, hora, lugar, latitud, longitud')
 
-      // Filtrado por fecha (si `fecha` es DATE, eq matchea perfecto)
       if (selectedDate) {
         const dateStr = dayjs(selectedDate).format('YYYY-MM-DD')
         query = query.eq('fecha', dateStr)
       }
+      if (lugar.trim()) query = query.ilike('lugar', `%${lugar.trim()}%`)
 
-      // Filtro por lugar (server-side)
-      if (lugar.trim()) {
-        query = query.ilike('lugar', `%${lugar.trim()}%`)
-      }
-
-      // Siempre ordenar de más reciente a más viejo
-      query = query
-        .order('fecha', { ascending: false })
-        .order('hora', { ascending: false })
+      query = query.order('fecha', { ascending: false }).order('hora', { ascending: false })
 
       const { data, error } = await query
       if (error) throw error
@@ -97,7 +87,6 @@ export default function LlegadasFM() {
       const llegadas = (data || []) as Llegada[]
       setItems(llegadas)
 
-      // Traer nombres de las empleadas
       const ids = Array.from(new Set(llegadas.map(l => l.usuario_id)))
       if (ids.length) {
         const { data: usrs, error: uerr } = await supabase
@@ -124,7 +113,6 @@ export default function LlegadasFM() {
     await fetchLlegadas()
   }
 
-  // Filtro por nombre/apellido (client-side)
   const dataRender = useMemo(() => {
     const q = buscar.trim().toLowerCase()
     if (!q) return items
@@ -148,7 +136,6 @@ export default function LlegadasFM() {
       ? dayjs(item.fecha).format('DD/MM')
       : String(item.fecha)
     const when = `${fechaStr} ${item.hora || ''}`.trim()
-
     const hasCoords = item.latitud != null && item.longitud != null
 
     return (
@@ -161,12 +148,10 @@ export default function LlegadasFM() {
               <Text style={styles.metaSmall}>
                 {Number(item.latitud).toFixed(5)}, {Number(item.longitud).toFixed(5)}
               </Text>
-
-              {/* Mini mapa */}
               <View style={styles.mapBox}>
                 <MapView
                   style={styles.map}
-                  pointerEvents="none" // solo visual
+                  pointerEvents="none"
                   initialRegion={{
                     latitude: Number(item.latitud),
                     longitude: Number(item.longitud),
@@ -176,7 +161,6 @@ export default function LlegadasFM() {
                 >
                   <Marker coordinate={{ latitude: Number(item.latitud), longitude: Number(item.longitud) }} />
                 </MapView>
-
                 <TouchableOpacity
                   onPress={() => openInMaps(Number(item.latitud!), Number(item.longitud!), item.lugar)}
                   style={styles.mapBtn}
@@ -195,7 +179,6 @@ export default function LlegadasFM() {
   const openPicker = () => setShowPicker(true)
   const clearDate = () => setSelectedDate(null)
 
-  // Sugerencias al escribir "Lugar"
   useEffect(() => {
     if (!lugar.trim()) { setSugerencias([]); return }
     const q = lugar.toLowerCase()
@@ -205,10 +188,18 @@ export default function LlegadasFM() {
 
   return (
     <View style={styles.container}>
+      {/* Header: botón Volver arriba */}
+      <View style={styles.headerRow}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.btnBack}>
+          <Ionicons name="chevron-back" size={20} color="#fff" />
+          <Text style={styles.btnBackText}>Volver</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Título DEBAJO del botón */}
       <Text style={styles.title}>Llegadas de Limpieza</Text>
 
       <View style={styles.filters}>
-        {/* Selector de fecha */}
         <View style={[styles.inputWrap, { flexDirection: 'row', alignItems: 'center', gap: 8 }]}>
           <View style={{ flex: 1 }}>
             <Text style={styles.label}>Fecha</Text>
@@ -218,7 +209,6 @@ export default function LlegadasFM() {
               </Text>
             </TouchableOpacity>
           </View>
-
           {selectedDate && (
             <TouchableOpacity onPress={clearDate} style={styles.clearBtn}>
               <Text style={styles.clearBtnText}>Quitar</Text>
@@ -226,7 +216,6 @@ export default function LlegadasFM() {
           )}
         </View>
 
-        {/* Lugar (server-side) con autocompletar */}
         <View style={[styles.inputWrap, { position: 'relative', zIndex: 20 }]}>
           <Text style={styles.label}>Lugar</Text>
           <TextInput
@@ -243,10 +232,7 @@ export default function LlegadasFM() {
                   <TouchableOpacity
                     key={e.id}
                     style={styles.suggestItem}
-                    onPress={() => {
-                      setLugar(e.nombre)
-                      setSugerencias([])
-                    }}
+                    onPress={() => { setLugar(e.nombre); setSugerencias([]) }}
                   >
                     <Text style={{ color: '#0f172a' }}>{e.nombre}</Text>
                   </TouchableOpacity>
@@ -256,7 +242,6 @@ export default function LlegadasFM() {
           )}
         </View>
 
-        {/* Buscar por nombre (client-side) */}
         <View style={styles.inputWrapFull}>
           <Text style={styles.label}>Buscar empleado</Text>
           <TextInput
@@ -318,41 +303,35 @@ export default function LlegadasFM() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff', padding: 16, paddingTop: 50 },
-  title: { fontSize: 20, fontWeight: 'bold', marginBottom: 12 },
+  container: { flex: 1, backgroundColor: '#fff', padding: 16, paddingTop: 70 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', columnGap: 12, marginBottom: 6 },
+  btnBack: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#6b7280',
+    paddingHorizontal: 14, height: 40, borderRadius: 10,
+  },
+  btnBackText: { color: '#fff', fontWeight: '700', marginLeft: 4 },
+
+  // Título debajo del botón
+  title: { fontSize: 22, fontWeight: 'bold', color: '#0f172a', marginBottom: 10 },
+
   filters: { flexDirection: 'row', gap: 8, alignItems: 'flex-end', marginBottom: 12, flexWrap: 'wrap' },
   inputWrap: { width: '47%' },
   inputWrapFull: { width: '100%' },
   label: { fontSize: 12, color: '#6b7280', marginBottom: 4 },
   input: { borderWidth: 1, borderColor: '#e5e7eb', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, backgroundColor: '#fff' },
-  // Sugerencias
+
   suggestBox: {
-    position: 'absolute',
-    top: 56,
-    left: 0,
-    right: 0,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 10,
-    zIndex: 50,
-    elevation: 6,
+    position: 'absolute', top: 56, left: 0, right: 0, backgroundColor: '#fff',
+    borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 10, zIndex: 50, elevation: 6,
   },
   suggestItem: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e2e8f0',
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e2e8f0',
   },
 
   dateBtn: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    justifyContent: 'center',
-    backgroundColor: '#f3f4f6',
+    borderWidth: 1, borderColor: '#d1d5db', borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 12, justifyContent: 'center', backgroundColor: '#f3f4f6',
   },
   dateBtnText: { color: '#111827', fontWeight: '600', fontSize: 14 },
   clearBtn: { backgroundColor: '#ef4444', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10, alignSelf: 'flex-end' },
@@ -365,24 +344,13 @@ const styles = StyleSheet.create({
   meta: { color: '#374151', marginTop: 2 },
   metaSmall: { color: '#6b7280', marginTop: 2, fontSize: 12 },
 
-  // Mini map
   mapBox: {
-    marginTop: 8,
-    height: 120,
-    borderRadius: 10,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
+    marginTop: 8, height: 120, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#e2e8f0',
   },
   map: { flex: 1 },
   mapBtn: {
-    position: 'absolute',
-    right: 8,
-    bottom: 8,
-    backgroundColor: '#2563EB',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 8,
+    position: 'absolute', right: 8, bottom: 8, backgroundColor: '#2563EB',
+    paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8,
   },
   mapBtnText: { color: '#fff', fontWeight: '700' },
 })

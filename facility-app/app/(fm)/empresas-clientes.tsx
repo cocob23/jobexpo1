@@ -125,7 +125,7 @@ export default function EmpresasClientesFM() {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#F8FAFC' },
   container: { padding: 16 },
-  title: { fontSize: 20, fontWeight: '800', color: '#0F172A', marginBottom: 12 },
+  title: { fontSize: 22, fontWeight: 'bold', color: '#0F172A', marginBottom: 12 },
 
   alert: {
     borderRadius: 12,

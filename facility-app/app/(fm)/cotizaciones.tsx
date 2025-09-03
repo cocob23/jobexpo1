@@ -1,3 +1,4 @@
+// app/(fm)/cotizaciones/index.tsx  (CotizacionesFM)
 import { Buffer } from 'buffer'
 import * as DocumentPicker from 'expo-document-picker'
 import * as FileSystem from 'expo-file-system'
@@ -12,8 +13,14 @@ import {
   TouchableOpacity,
   View,
   Modal,
+  BackHandler,
+  Platform,
 } from 'react-native'
 import { supabase } from '@/constants/supabase'
+import { Stack, useRouter } from 'expo-router'
+import { useNavigation } from '@react-navigation/native'
+import { SafeAreaView } from 'react-native-safe-area-context'
+import { Ionicons } from '@expo/vector-icons'
 
 global.Buffer = Buffer
 
@@ -35,18 +42,21 @@ type Cotizacion = {
 const pad6 = (n: number) => String(n).padStart(6, '0')
 
 export default function CotizacionesFM() {
+  const router = useRouter()
+  const navigation = useNavigation()
+
   const [meId, setMeId] = useState<string | null>(null)
   const [cargando, setCargando] = useState(false)
   const [listado, setListado] = useState<Cotizacion[]>([])
 
   // Filtros
-  const [qId, setQId] = useState('')          // N° o UUID
+  const [qId, setQId] = useState('')
   const [qCliente, setQCliente] = useState('')
   const [desde, setDesde] = useState('')
   const [hasta, setHasta] = useState('')
 
   // Form
-  const [cliente, setCliente] = useState('') // se usa como caja de búsqueda + valor final
+  const [cliente, setCliente] = useState('')
   const [descripcion, setDescripcion] = useState('')
   const [monto, setMonto] = useState<string>('')
   const [fecha, setFecha] = useState<string>('')
@@ -57,7 +67,7 @@ export default function CotizacionesFM() {
   // Empresas para autocompletar en el formulario de alta
   const [empresas, setEmpresas] = useState<{ id: string; nombre: string }[]>([])
   const [empresasFiltradas, setEmpresasFiltradas] = useState<{ id: string; nombre: string }[]>([])
-  const [empresaSeleccionadaId, setEmpresaSeleccionadaId] = useState<string>('') // obligatorio seleccionar
+  const [empresaSeleccionadaId, setEmpresaSeleccionadaId] = useState<string>('')
 
   // Modales
   const [showForm, setShowForm] = useState(false)
@@ -68,14 +78,33 @@ export default function CotizacionesFM() {
     []
   )
 
-  // Helpers filtro ID/N°
-  const isUUID = (s: string) =>
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s.trim())
-  const parseNumero = (s: string) => {
-    const raw = s.trim().replace(/^#/, '')
-    const n = parseInt(raw, 10)
-    return Number.isFinite(n) ? n : null
-  }
+  useEffect(() => {
+    const sub = navigation.addListener('beforeRemove', (e) => {
+      if (showForm || showFiltros) {
+        e.preventDefault()
+        if (showForm) setShowForm(false)
+        if (showFiltros) setShowFiltros(false)
+        return
+      }
+      // @ts-ignore
+      if (navigation.canGoBack && (navigation as any).canGoBack?.()) return
+      e.preventDefault()
+      router.replace('/(fm)')
+    })
+    return sub
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation, router, showForm, showFiltros])
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') return
+    const onBack = () => {
+      if (showForm) { setShowForm(false); return true }
+      if (showFiltros) { setShowFiltros(false); return true }
+      return false
+    }
+    const bh = BackHandler.addEventListener('hardwareBackPress', onBack)
+    return () => bh.remove()
+  }, [showForm, showFiltros])
 
   useEffect(() => {
     ;(async () => {
@@ -85,6 +114,14 @@ export default function CotizacionesFM() {
       await Promise.all([cargarListado(), cargarEmpresas()])
     })()
   }, [])
+
+  const isUUID = (s: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s.trim())
+  const parseNumero = (s: string) => {
+    const raw = s.trim().replace(/^#/, '')
+    const n = parseInt(raw, 10)
+    return Number.isFinite(n) ? n : null
+  }
 
   const cargarEmpresas = async () => {
     const { data, error } = await supabase
@@ -98,32 +135,24 @@ export default function CotizacionesFM() {
     setCargando(true)
     let q = supabase.from('cotizaciones').select('*').order('numero', { ascending: false })
 
-    // Filtro por N°/UUID
     if (qId.trim()) {
-      if (isUUID(qId)) {
-        q = q.eq('id', qId.trim())
-      } else {
+      if (isUUID(qId)) q = q.eq('id', qId.trim())
+      else {
         const n = parseNumero(qId)
         if (n !== null) q = q.eq('numero', n)
       }
     }
 
-    // Resto de filtros
     if (qCliente) q = q.ilike('cliente', `%${qCliente}%`)
     if (desde) q = q.gte('fecha', desde)
     if (hasta) q = q.lte('fecha', hasta)
 
     const { data, error } = await q
-    if (error) {
-      console.error(error)
-    } else if (data) {
-      setListado(data as Cotizacion[])
-    }
+    if (!error && data) setListado(data as Cotizacion[])
     setCargando(false)
   }
 
   useEffect(() => {
-    // Autocompletar: filtra por lo que se tipea en "cliente"
     if (!cliente.trim()) {
       setEmpresasFiltradas([])
       return
@@ -156,18 +185,15 @@ export default function CotizacionesFM() {
     setArchivo({ uri: f.uri, name: f.name || 'archivo.pdf', mimeType: f.mimeType || 'application/octet-stream' })
   }
 
-  // Subir a Supabase Storage vía PUT (base64)
   const uploadToStorage = async (bucket: string, path: string, fileUri: string, mime: string) => {
     const base64 = await FileSystem.readAsStringAsync(fileUri, { encoding: FileSystem.EncodingType.Base64 })
     const bin = Buffer.from(base64, 'base64')
     const { data: sessionData, error: sessionErr } = await supabase.auth.getSession()
     if (sessionErr || !sessionData?.session) throw new Error('Sesión inválida')
-
     // @ts-ignore
     const SUPABASE_URL = (supabase as any).supabaseUrl || process.env.EXPO_PUBLIC_SUPABASE_URL
     // @ts-ignore
     const SUPABASE_ANON_KEY = (supabase as any).supabaseKey || process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY
-
     const url = `${SUPABASE_URL}/storage/v1/object/${bucket}/${encodeURI(path)}`
     const res = await fetch(url, {
       method: 'PUT',
@@ -188,25 +214,17 @@ export default function CotizacionesFM() {
   const subirCotizacion = async () => {
     try {
       if (!meId) return Alert.alert('Sesión', 'No hay sesión')
-
-      // 🔒 Enforce: seleccionar empresa existente
       if (!empresaSeleccionadaId) {
-        return Alert.alert(
-          'Empresa requerida',
-          'Seleccioná una Empresa/Cliente existente. Si no existe, creala antes desde “Agregar Empresa/Cliente”.'
-        )
+        return Alert.alert('Empresa requerida', 'Seleccioná una Empresa/Cliente existente. Si no existe, creala antes desde “Agregar Empresa/Cliente”.')
       }
-      // Validación defensiva: nombre coincide con selección
       const empresaReal = empresas.find((e) => e.id === empresaSeleccionadaId)?.nombre || ''
       if (!empresaReal || empresaReal !== cliente) {
         return Alert.alert('Validación', 'Elegí una empresa de la lista de sugerencias.')
       }
-
       if (!archivo) return Alert.alert('Validación', 'Adjuntá el archivo (PDF/Excel)')
 
       setSubiendo(true)
 
-      // 1) Insert preliminar para obtener numero
       const { data: inserted, error: insertErr } = await supabase
         .from('cotizaciones')
         .insert({
@@ -224,7 +242,6 @@ export default function CotizacionesFM() {
 
       if (insertErr || !inserted) throw new Error(insertErr?.message || 'Error al crear la cotización')
 
-      // 2) Subir a storage usando el numero
       const safeCliente = empresaReal.toLowerCase().replace(/[^a-z0-9-_]+/g, '-')
       const ext = (archivo.name.split('.').pop() || (archivo.mimeType?.includes('pdf') ? 'pdf' : 'dat')).toLowerCase()
       const fileName = `${pad6(inserted.numero)}_${safeCliente}.${ext}`
@@ -232,13 +249,12 @@ export default function CotizacionesFM() {
 
       await uploadToStorage('cotizaciones', path, archivo.uri, archivo.mimeType)
 
-      // 3) Update con archivo_path
       const { error: updErr } = await supabase.from('cotizaciones').update({ archivo_path: path }).eq('id', inserted.id)
       if (updErr) throw new Error('Subido, pero no se guardó el path: ' + updErr.message)
 
       Alert.alert('OK', `Cotización COT-${pad6(inserted.numero)} creada`)
       limpiarForm()
-      setShowForm(false) // UX: cerrar modal al crear OK
+      setShowForm(false)
       cargarListado()
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'No se pudo subir la cotización')
@@ -276,285 +292,251 @@ export default function CotizacionesFM() {
   }
 
   return (
-    <View style={styles.wrap}>
-      <Text style={styles.title}>Cotizaciones (FM)</Text>
-
-      {/* Barra compacta: acciones arriba, cards ocupan toda la altura */}
-      <View style={styles.toolbar}>
-        <TouchableOpacity style={styles.btnPrimary} onPress={() => setShowForm(true)}>
-          <Text style={styles.btnPrimaryText}>Nueva cotización</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.btn} onPress={() => setShowFiltros(true)}>
-          <Text style={styles.btnText}>Filtros</Text>
+    <SafeAreaView style={styles.safe} edges={['top']}>
+      {/* Header Back compacto */}
+      <View style={styles.headerRow}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.btnBack}>
+          <Ionicons name="chevron-back" size={20} color="#fff" />
+          <Text style={styles.btnBackText}>Volver</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Lista (máximo espacio en pantalla) */}
-      <ScrollView style={{ flex: 1 }}>
-        {!listado.length && <Text style={styles.empty}>No hay cotizaciones</Text>}
-        {listado.map((row) => (
-          <View key={row.id} style={styles.card}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.num}>#{pad6(row.numero)}</Text>
-              <TouchableOpacity onPress={() => actualizarEstado(row)} style={styles.estadoChip}>
-                <Text style={styles.estadoText}>{row.estado}</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.cliente}>{row.cliente}</Text>
-            <Text style={styles.desc}>{row.descripcion ?? '-'}</Text>
-            <View style={styles.grid2}>
-              <Text style={styles.meta}>Monto: <Text style={styles.bold}>{row.monto ?? '-'}</Text></Text>
-              <Text style={styles.meta}>Fecha: <Text style={styles.bold}>{row.fecha ?? '-'}</Text></Text>
-            </View>
+      <View style={styles.wrap}>
+        <Stack.Screen
+          options={{ title: 'Cotizaciones', headerShown: false, gestureEnabled: true }}
+        />
 
-            <View style={styles.actions}>
-              <TouchableOpacity
-                style={[styles.linkBtn, !row.archivo_path && { opacity: 0.5 }]}
-                onPress={() => verArchivo(row)}
-                disabled={!row.archivo_path}
-              >
-                <Text style={styles.linkBtnText}>{row.archivo_path ? 'Ver/Descargar' : 'Sin archivo'}</Text>
-              </TouchableOpacity>
+        <Text style={styles.title}>Cotizaciones (FM)</Text>
+
+        <View style={styles.toolbar}>
+          <TouchableOpacity style={styles.btnPrimary} onPress={() => setShowForm(true)}>
+            <Text style={styles.btnPrimaryText}>Nueva cotización</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.btn} onPress={() => setShowFiltros(true)}>
+            <Text style={styles.btnText}>Filtros</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
+          {!listado.length && <Text style={styles.empty}>No hay cotizaciones</Text>}
+          {listado.map((row) => (
+            <View key={row.id} style={styles.card}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.num}>#{pad6(row.numero)}</Text>
+                <TouchableOpacity onPress={() => actualizarEstado(row)} style={styles.estadoChip}>
+                  <Text style={styles.estadoText}>{row.estado}</Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.cliente}>{row.cliente}</Text>
+              <Text style={styles.desc}>{row.descripcion ?? '-'}</Text>
+              <View style={styles.grid2}>
+                <Text style={styles.meta}>Monto: <Text style={styles.bold}>{row.monto ?? '-'}</Text></Text>
+                <Text style={styles.meta}>Fecha: <Text style={styles.bold}>{row.fecha ?? '-'}</Text></Text>
+              </View>
+              <View style={styles.actions}>
+                <TouchableOpacity
+                  style={[styles.linkBtn, !row.archivo_path && { opacity: 0.5 }]}
+                  onPress={() => verArchivo(row)}
+                  disabled={!row.archivo_path}
+                >
+                  <Text style={styles.linkBtnText}>{row.archivo_path ? 'Ver/Descargar' : 'Sin archivo'}</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        ))}
-      </ScrollView>
+          ))}
+        </ScrollView>
 
-      {/* ===== Modal: Formulario de alta ===== */}
-      <Modal transparent animationType="slide" visible={showForm} onRequestClose={() => setShowForm(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Nueva cotización</Text>
-              <TouchableOpacity onPress={() => setShowForm(false)} style={styles.modalClose}>
-                <Text style={{ fontWeight: '800', color: '#0f172a' }}>✕</Text>
-              </TouchableOpacity>
-            </View>
+        {/* Modal: Form */}
+        <Modal transparent animationType="slide" visible={showForm} onRequestClose={() => setShowForm(false)}>
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Nueva cotización</Text>
+                <TouchableOpacity onPress={() => setShowForm(false)} style={styles.modalClose}>
+                  <Text style={{ fontWeight: '800', color: '#0f172a' }}>✕</Text>
+                </TouchableOpacity>
+              </View>
 
-            <ScrollView contentContainerStyle={{ paddingBottom: 20 }} keyboardShouldPersistTaps="handled">
-              <View style={styles.form}>
-                <Text style={styles.label}>Cliente *</Text>
+              <ScrollView contentContainerStyle={{ paddingBottom: 20 }} keyboardShouldPersistTaps="handled">
+                <View style={styles.form}>
+                  <Text style={styles.label}>Cliente *</Text>
 
-                {/* Autocompletar empresas */}
-                <View style={{ position: 'relative' }}>
+                  <View style={{ position: 'relative' }}>
+                    <TextInput
+                      value={cliente}
+                      onChangeText={(t) => { setCliente(t); setEmpresaSeleccionadaId('') }}
+                      placeholder="Buscar y seleccionar empresa/cliente existente"
+                      style={styles.input}
+                      placeholderTextColor="#6b7280"
+                      autoCapitalize="sentences"
+                    />
+                    {empresasFiltradas.length > 0 && (
+                      <View style={styles.suggestBox}>
+                        <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 220 }}>
+                          {empresasFiltradas.map((e) => (
+                            <TouchableOpacity
+                              key={e.id}
+                              style={styles.suggestItem}
+                              onPress={() => { setCliente(e.nombre); setEmpresaSeleccionadaId(e.id); setEmpresasFiltradas([]) }}
+                            >
+                              <Text style={{ color: '#0f172a' }}>{e.nombre}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                      </View>
+                    )}
+                  </View>
+
+                  <Text style={styles.label}>Descripción</Text>
                   <TextInput
-                    value={cliente}
-                    onChangeText={(t) => {
-                      setCliente(t)
-                      setEmpresaSeleccionadaId('')  // al tipear, invalida la selección previa
-                    }}
-                    placeholder="Buscar y seleccionar empresa/cliente existente"
+                    value={descripcion}
+                    onChangeText={setDescripcion}
+                    placeholder="Descripción"
                     style={styles.input}
                     placeholderTextColor="#6b7280"
                     autoCapitalize="sentences"
                   />
-                  {empresasFiltradas.length > 0 && (
-                    <View style={styles.suggestBox}>
-                      <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 220 }}>
-                        {empresasFiltradas.map((e) => (
-                          <TouchableOpacity
-                            key={e.id}
-                            style={styles.suggestItem}
-                            onPress={() => {
-                              setCliente(e.nombre)
-                              setEmpresaSeleccionadaId(e.id)
-                              setEmpresasFiltradas([])
-                            }}
-                          >
-                            <Text style={{ color: '#0f172a' }}>{e.nombre}</Text>
-                          </TouchableOpacity>
-                        ))}
-                      </ScrollView>
+
+                  <View style={styles.row3}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Monto</Text>
+                      <TextInput value={monto} onChangeText={setMonto} placeholder="0" style={styles.input} placeholderTextColor="#6b7280" keyboardType="decimal-pad" />
                     </View>
-                  )}
-                </View>
-
-                <Text style={styles.label}>Descripción</Text>
-                <TextInput
-                  value={descripcion}
-                  onChangeText={setDescripcion}
-                  placeholder="Descripción"
-                  style={styles.input}
-                  placeholderTextColor="#6b7280"
-                  autoCapitalize="sentences"
-                />
-
-                <View style={styles.row3}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.label}>Monto</Text>
-                    <TextInput
-                      value={monto}
-                      onChangeText={setMonto}
-                      placeholder="0"
-                      style={styles.input}
-                      placeholderTextColor="#6b7280"
-                      keyboardType="decimal-pad"
-                    />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Fecha</Text>
+                      <TextInput value={fecha} onChangeText={setFecha} placeholder="YYYY-MM-DD" style={styles.input} placeholderTextColor="#6b7280" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.label}>Estado</Text>
+                      <TouchableOpacity
+                        style={styles.input}
+                        onPress={() =>
+                          Alert.alert(
+                            'Estado',
+                            'Seleccioná un estado',
+                            estados.map((es) => ({ text: es, onPress: () => setEstado(es) }))
+                          )
+                        }
+                      >
+                        <Text style={styles.inputText}>{estado}</Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.label}>Fecha</Text>
-                    <TextInput
-                      value={fecha}
-                      onChangeText={setFecha}
-                      placeholder="YYYY-MM-DD"
-                      style={styles.input}
-                      placeholderTextColor="#6b7280"
-                    />
+
+                  <Text style={styles.label}>Archivo (PDF/Excel) *</Text>
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <TouchableOpacity style={styles.btnGhost} onPress={elegirArchivo}>
+                      <Text style={styles.btnGhostText}>{archivo ? archivo.name : 'Elegir archivo'}</Text>
+                    </TouchableOpacity>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.label}>Estado</Text>
+
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                    <TouchableOpacity style={styles.btnPrimary} disabled={subiendo} onPress={subirCotizacion}>
+                      <Text style={styles.btnPrimaryText}>{subiendo ? 'Subiendo…' : 'Guardar cotización'}</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity
-                      style={styles.input}
-                      onPress={() =>
-                        Alert.alert(
-                          'Estado',
-                          'Seleccioná un estado',
-                          estados.map((es) => ({ text: es, onPress: () => setEstado(es) }))
-                        )
-                      }
+                      style={styles.btn}
+                      disabled={subiendo}
+                      onPress={() => { limpiarForm(); setShowForm(false) }}
                     >
-                      <Text style={styles.inputText}>{estado}</Text>
+                      <Text style={styles.btnText}>Cancelar</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
-
-                <Text style={styles.label}>Archivo (PDF/Excel) *</Text>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <TouchableOpacity style={styles.btnGhost} onPress={elegirArchivo}>
-                    <Text style={styles.btnGhostText}>{archivo ? archivo.name : 'Elegir archivo'}</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-                  <TouchableOpacity style={styles.btnPrimary} disabled={subiendo} onPress={subirCotizacion}>
-                    <Text style={styles.btnPrimaryText}>{subiendo ? 'Subiendo…' : 'Guardar cotización'}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.btn}
-                    disabled={subiendo}
-                    onPress={() => {
-                      limpiarForm()
-                      setShowForm(false)
-                    }}
-                  >
-                    <Text style={styles.btnText}>Cancelar</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-
-      {/* ===== Modal: Filtros ===== */}
-      <Modal transparent animationType="slide" visible={showFiltros} onRequestClose={() => setShowFiltros(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Filtros</Text>
-              <TouchableOpacity onPress={() => setShowFiltros(false)} style={styles.modalClose}>
-                <Text style={{ fontWeight: '800', color: '#0f172a' }}>✕</Text>
-              </TouchableOpacity>
+              </ScrollView>
             </View>
-
-            <ScrollView contentContainerStyle={{ paddingBottom: 20 }} keyboardShouldPersistTaps="handled">
-              <View style={styles.filtros}>
-                <TextInput
-                  placeholder="Buscar por N° o UUID…"
-                  value={qId}
-                  onChangeText={setQId}
-                  style={styles.input}
-                  onSubmitEditing={() => { cargarListado(); setShowFiltros(false) }}
-                  placeholderTextColor="#6b7280"
-                />
-                <TextInput
-                  placeholder="Buscar por cliente…"
-                  value={qCliente}
-                  onChangeText={setQCliente}
-                  style={styles.input}
-                  onSubmitEditing={() => { cargarListado(); setShowFiltros(false) }}
-                  placeholderTextColor="#6b7280"
-                />
-                <TextInput
-                  placeholder="Desde (YYYY-MM-DD)"
-                  value={desde}
-                  onChangeText={setDesde}
-                  style={styles.input}
-                  placeholderTextColor="#6b7280"
-                />
-                <TextInput
-                  placeholder="Hasta (YYYY-MM-DD)"
-                  value={hasta}
-                  onChangeText={setHasta}
-                  style={styles.input}
-                  placeholderTextColor="#6b7280"
-                />
-
-                <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
-                  <TouchableOpacity
-                    onPress={() => { cargarListado(); setShowFiltros(false) }}
-                    disabled={cargando}
-                    style={[styles.btnPrimary, cargando && { opacity: 0.7 }]}
-                  >
-                    <Text style={styles.btnPrimaryText}>{cargando ? 'Cargando…' : 'Aplicar filtros'}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={() => { setQId(''); setQCliente(''); setDesde(''); setHasta(''); }}
-                    style={styles.btn}
-                  >
-                    <Text style={styles.btnText}>Limpiar</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </ScrollView>
           </View>
-        </View>
-      </Modal>
-    </View>
+        </Modal>
+
+        {/* Modal: Filtros */}
+        <Modal transparent animationType="slide" visible={showFiltros} onRequestClose={() => setShowFiltros(false)}>
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Filtros</Text>
+                <TouchableOpacity onPress={() => setShowFiltros(false)} style={styles.modalClose}>
+                  <Text style={{ fontWeight: '800', color: '#0f172a' }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView contentContainerStyle={{ paddingBottom: 20 }} keyboardShouldPersistTaps="handled">
+                <View style={styles.filtros}>
+                  <TextInput
+                    placeholder="Buscar por N° o UUID…"
+                    value={qId}
+                    onChangeText={setQId}
+                    style={styles.input}
+                    onSubmitEditing={() => { cargarListado(); setShowFiltros(false) }}
+                    placeholderTextColor="#6b7280"
+                  />
+                  <TextInput
+                    placeholder="Buscar por cliente…"
+                    value={qCliente}
+                    onChangeText={setQCliente}
+                    style={styles.input}
+                    onSubmitEditing={() => { cargarListado(); setShowFiltros(false) }}
+                    placeholderTextColor="#6b7280"
+                  />
+                  <TextInput placeholder="Desde (YYYY-MM-DD)" value={desde} onChangeText={setDesde} style={styles.input} placeholderTextColor="#6b7280" />
+                  <TextInput placeholder="Hasta (YYYY-MM-DD)" value={hasta} onChangeText={setHasta} style={styles.input} placeholderTextColor="#6b7280" />
+
+                  <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+                    <TouchableOpacity onPress={() => { cargarListado(); setShowFiltros(false) }} disabled={cargando} style={[styles.btnPrimary, cargando && { opacity: 0.7 }]}>
+                      <Text style={styles.btnPrimaryText}>{cargando ? 'Cargando…' : 'Aplicar filtros'}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => { setQId(''); setQCliente(''); setDesde(''); setHasta(''); }} style={styles.btn}>
+                      <Text style={styles.btnText}>Limpiar</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      </View>
+    </SafeAreaView>
   )
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, padding: 16, backgroundColor: '#f1f5f9' },
-  title: { fontSize: 18, fontWeight: '700', color: '#0f172a', marginBottom: 12 },
+  safe: { flex: 1, backgroundColor: '#f1f5f9' },
+  headerRow: {
+    paddingHorizontal: 16,
+    paddingTop: 40,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f1f5f9',
+  },
+  btnBack: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#6b7280',
+    paddingHorizontal: 14,
+    height: 40,
+    borderRadius: 10,
+  },
+  btnBackText: { color: '#fff', fontWeight: '700', marginLeft: 4 },
 
-  // Barra superior compacta
+  wrap: { flex: 1, padding: 16, backgroundColor: '#f1f5f9' },
+  title: { fontSize: 22, fontWeight: 'bold', color: '#0f172a', marginBottom: 12 },
+
   toolbar: { flexDirection: 'row', gap: 8, marginBottom: 10 },
 
   form: { borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 12, backgroundColor: '#fff', marginBottom: 12 },
   filtros: { gap: 8, marginBottom: 12 },
 
   label: { color: '#475569', fontWeight: '700', marginBottom: 4 },
-  input: {
-    borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10,
-    backgroundColor: '#fff', color: '#0f172a',
-  },
-  // caja de sugerencias
-  suggestBox: {
-    position: 'absolute',
-    top: 52,
-    left: 0,
-    right: 0,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    borderRadius: 10,
-    zIndex: 50,
-  },
-  suggestItem: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e2e8f0',
-  },
+  input: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#fff', color: '#0f172a' },
+  inputText: { color: '#0f172a' },
 
-  // Botones base
+  suggestBox: { position: 'absolute', top: 52, left: 0, right: 0, backgroundColor: '#fff', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 10, zIndex: 50 },
+  suggestItem: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#e2e8f0' },
+
   btnPrimary: { backgroundColor: '#0ea5e9', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 12 },
   btnPrimaryText: { color: '#fff', fontWeight: '700' },
-  btn: {
-    backgroundColor: '#e2e8f0', borderWidth: 1, borderColor: '#cbd5e1',
-    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, alignItems: 'center', justifyContent: 'center'
-  },
+  btn: { backgroundColor: '#e2e8f0', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
   btnText: { fontWeight: '700', color: '#0f172a' },
   btnGhost: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
   btnGhostText: { fontWeight: '700', color: '#0f172a' },
@@ -574,15 +556,10 @@ const styles = StyleSheet.create({
   linkBtn: { backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 },
   linkBtnText: { fontWeight: '700', color: '#0f172a' },
 
-  // Modal
-  modalBackdrop: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end'
-  },
-  modalCard: {
-    maxHeight: '88%', backgroundColor: '#f8fafc', borderTopLeftRadius: 16, borderTopRightRadius: 16,
-    paddingHorizontal: 14, paddingTop: 10, paddingBottom: 16,
-  },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
+  modalCard: { maxHeight: '88%', backgroundColor: '#f8fafc', borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingHorizontal: 14, paddingTop: 10, paddingBottom: 16 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   modalTitle: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
   modalClose: { padding: 6 },
+  row3: { flexDirection: 'row', gap: 10 },
 })

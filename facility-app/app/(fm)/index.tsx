@@ -9,7 +9,6 @@ export default function IndexFM() {
   const acciones: { label: string; icon: keyof typeof Ionicons.glyphMap; path: string }[] = [
     { label: 'Asignar Tarea',        icon: 'add-circle-outline',     path: '/(fm)/asignar-tarea' },
     { label: 'Ver Tareas',           icon: 'checkbox-outline',       path: '/(fm)/ver-tareas' },
-    { label: 'Aprobar Trabajos',     icon: 'checkmark-done-outline', path: '/(fm)/aprobar-trabajos' },
     { label: 'Agregar Técnico',      icon: 'person-add-outline',     path: '/crear-tecnico' }, // según tu ruta actual
     { label: 'Cotizaciones',         icon: 'calculator-outline',     path: '/(fm)/cotizaciones' },
     { label: 'Técnicos',             icon: 'construct-outline',      path: '/(fm)/tecnicos' },

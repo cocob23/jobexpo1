@@ -1,7 +1,6 @@
 // app/(superadmin)/empresas/crear.tsx
 import React, { useMemo, useRef, useState } from 'react'
 import {
-  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -12,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
+import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '@/constants/supabase'
@@ -44,21 +44,6 @@ const toSlug = (s: string) =>
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 60)
-
-const onlyDigits = (s: string) => s.replace(/\D/g, '')
-
-function validarCUIT(cuitRaw: string): boolean {
-  const cuit = onlyDigits(cuitRaw)
-  if (cuit.length !== 11) return false
-  const nums = cuit.split('').map(Number)
-  const factores = [5,4,3,2,7,6,5,4,3,2]
-  const base = nums.slice(0, 10)
-  const dv = nums[10]
-  const suma = base.reduce((acc, n, i) => acc + n * factores[i], 0)
-  const mod = suma % 11
-  const calc = mod === 0 ? 0 : mod === 1 ? 9 : 11 - mod
-  return calc === dv
-}
 
 export default function CrearEmpresaMovil() {
   const router = useRouter()
@@ -106,10 +91,7 @@ export default function CrearEmpresaMovil() {
       setErr('Completá el nombre.')
       return
     }
-    if (f.cuit && !validarCUIT(f.cuit)) {
-      setErr('El CUIT no es válido (opcional, pero si lo cargás debe ser válido).')
-      return
-    }
+    // ✅ Sin validación de CUIT (opcional, cualquier formato)
 
     setLoading(true)
     try {
@@ -117,7 +99,7 @@ export default function CrearEmpresaMovil() {
 
       const payload = {
         nombre: f.nombre.trim(),
-        cuit: f.cuit ? onlyDigits(f.cuit) : null,
+        cuit: f.cuit ? f.cuit.trim() : null, // ✅ se guarda tal cual
         email: f.email || null,
         telefono: f.telefono || null,
         direccion: f.direccion || null,
@@ -133,7 +115,6 @@ export default function CrearEmpresaMovil() {
         .single()
 
       if (error) {
-        // Postgres insufficient_privilege suele ser 42501 en el origen
         if ((error as any).code === '42501') {
           setErr('No tenés permisos para crear empresas (RLS).')
         } else {
@@ -153,139 +134,142 @@ export default function CrearEmpresaMovil() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: '#f8fafc' }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        {/* Header */}
-        <View style={styles.headerRow}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.btnBack}>
-            <Ionicons name="chevron-back" size={20} color="#fff" />
-            <Text style={styles.btnBackText}>Volver</Text>
-          </TouchableOpacity>
-          <Text style={styles.title}>Nueva empresa / cliente</Text>
-        </View>
-        <Text style={styles.sub}>Completá los datos. El CUIT es opcional.</Text>
-
-        {/* Alerts */}
-        {err ? (
-          <View style={[styles.alert, styles.alertError]}>
-            <Text style={styles.alertTextError}>{err}</Text>
-          </View>
-        ) : null}
-        {ok ? (
-          <View style={[styles.alert, styles.alertOk]}>
-            <Text style={styles.alertTextOk}>{ok}</Text>
-          </View>
-        ) : null}
-
-        {/* Form */}
-        <View style={styles.card}>
-          <Field
-            label="Nombre *"
-            value={f.nombre}
-            placeholder="Cliente Demo S.A."
-            onChangeText={v => onChange('nombre', v)}
-            onFocus={() => setFocusKey('nombre')}
-            onBlur={() => setFocusKey(null)}
-            focused={focusKey === 'nombre'}
-            inputRef={nombreRef}
-            autoFocus
-            returnKeyType="next"
-          />
-
-          <View style={styles.row2}>
-            <Field
-              label="CUIT (opcional)"
-              value={f.cuit}
-              placeholder="30-12345678-9"
-              onChangeText={v => onChange('cuit', v)}
-              onFocus={() => setFocusKey('cuit')}
-              onBlur={() => setFocusKey(null)}
-              focused={focusKey === 'cuit'}
-              keyboardType="number-pad"
-            />
-            <Field
-              label="Email"
-              value={f.email}
-              placeholder="contacto@cliente.com"
-              onChangeText={v => onChange('email', v)}
-              onFocus={() => setFocusKey('email')}
-              onBlur={() => setFocusKey(null)}
-              focused={focusKey === 'email'}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
-
-          <View style={styles.row2}>
-            <Field
-              label="Teléfono"
-              value={f.telefono}
-              placeholder="011-1234-5678"
-              onChangeText={v => onChange('telefono', v)}
-              onFocus={() => setFocusKey('telefono')}
-              onBlur={() => setFocusKey(null)}
-              focused={focusKey === 'telefono'}
-              keyboardType="phone-pad"
-            />
-            <Field
-              label="Dirección"
-              value={f.direccion}
-              placeholder="Av. Siempreviva 742"
-              onChangeText={v => onChange('direccion', v)}
-              onFocus={() => setFocusKey('direccion')}
-              onBlur={() => setFocusKey(null)}
-              focused={focusKey === 'direccion'}
-            />
-          </View>
-
-          <View style={styles.row2}>
-            <Field
-              label="Localidad"
-              value={f.localidad}
-              placeholder="CABA"
-              onChangeText={v => onChange('localidad', v)}
-              onFocus={() => setFocusKey('localidad')}
-              onBlur={() => setFocusKey(null)}
-              focused={focusKey === 'localidad'}
-            />
-            <Field
-              label="Provincia"
-              value={f.provincia}
-              placeholder="Buenos Aires"
-              onChangeText={v => onChange('provincia', v)}
-              onFocus={() => setFocusKey('provincia')}
-              onBlur={() => setFocusKey(null)}
-              focused={focusKey === 'provincia'}
-            />
-          </View>
-
-          {/* Actions */}
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={[styles.btnPrimary, disabled && styles.btnDisabled]}
-              onPress={submit}
-              disabled={disabled}
-            >
-              {loading ? (
-                <ActivityIndicator />
-              ) : (
-                <Text style={styles.btnPrimaryText}>Crear empresa</Text>
-              )}
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }} edges={['top']}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+          {/* Header */}
+          <View style={styles.headerRow}>
+            <TouchableOpacity onPress={() => router.back()} style={styles.btnBack}>
+              <Ionicons name="chevron-back" size={20} color="#fff" />
+              <Text style={styles.btnBackText}>Volver</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.btnGhost}
-              onPress={() => router.back()}
-            >
-              <Text style={styles.btnGhostText}>Cancelar</Text>
-            </TouchableOpacity>
+            <Text style={styles.title}>Nueva empresa / cliente</Text>
           </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          <Text style={styles.sub}>Completá los datos. El CUIT es opcional.</Text>
+
+          {/* Alerts */}
+          {err ? (
+            <View style={[styles.alert, styles.alertError]}>
+              <Text style={styles.alertTextError}>{err}</Text>
+            </View>
+          ) : null}
+          {ok ? (
+            <View style={[styles.alert, styles.alertOk]}>
+              <Text style={styles.alertTextOk}>{ok}</Text>
+            </View>
+          ) : null}
+
+          {/* Form */}
+          <View style={styles.card}>
+            <Field
+              label="Nombre *"
+              value={f.nombre}
+              placeholder="Cliente Demo S.A."
+              onChangeText={v => onChange('nombre', v)}
+              onFocus={() => setFocusKey('nombre')}
+              onBlur={() => setFocusKey(null)}
+              focused={focusKey === 'nombre'}
+              inputRef={nombreRef}
+              autoFocus
+              returnKeyType="next"
+            />
+
+            <View style={styles.row2}>
+              <Field
+                label="CUIT (opcional)"
+                value={f.cuit}
+                placeholder="30-12345678-9"
+                onChangeText={v => onChange('cuit', v)}
+                onFocus={() => setFocusKey('cuit')}
+                onBlur={() => setFocusKey(null)}
+                focused={focusKey === 'cuit'}
+                keyboardType="default"    // ✅ permite guiones/espacios
+                autoCapitalize="none"
+              />
+              <Field
+                label="Email"
+                value={f.email}
+                placeholder="contacto@cliente.com"
+                onChangeText={v => onChange('email', v)}
+                onFocus={() => setFocusKey('email')}
+                onBlur={() => setFocusKey(null)}
+                focused={focusKey === 'email'}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.row2}>
+              <Field
+                label="Teléfono"
+                value={f.telefono}
+                placeholder="011-1234-5678"
+                onChangeText={v => onChange('telefono', v)}
+                onFocus={() => setFocusKey('telefono')}
+                onBlur={() => setFocusKey(null)}
+                focused={focusKey === 'telefono'}
+                keyboardType="phone-pad"
+              />
+              <Field
+                label="Dirección"
+                value={f.direccion}
+                placeholder="Av. Siempreviva 742"
+                onChangeText={v => onChange('direccion', v)}
+                onFocus={() => setFocusKey('direccion')}
+                onBlur={() => setFocusKey(null)}
+                focused={focusKey === 'direccion'}
+              />
+            </View>
+
+            <View style={styles.row2}>
+              <Field
+                label="Localidad"
+                value={f.localidad}
+                placeholder="CABA"
+                onChangeText={v => onChange('localidad', v)}
+                onFocus={() => setFocusKey('localidad')}
+                onBlur={() => setFocusKey(null)}
+                focused={focusKey === 'localidad'}
+              />
+              <Field
+                label="Provincia"
+                value={f.provincia}
+                placeholder="Buenos Aires"
+                onChangeText={v => onChange('provincia', v)}
+                onFocus={() => setFocusKey('provincia')}
+                onBlur={() => setFocusKey(null)}
+                focused={focusKey === 'provincia'}
+              />
+            </View>
+
+            {/* Actions */}
+            <View style={styles.actions}>
+              <TouchableOpacity
+                style={[styles.btnPrimary, disabled && styles.btnDisabled]}
+                onPress={submit}
+                disabled={disabled}
+              >
+                {loading ? (
+                  <ActivityIndicator />
+                ) : (
+                  <Text style={styles.btnPrimaryText}>Crear empresa</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.btnGhost}
+                onPress={() => router.back()}
+              >
+                <Text style={styles.btnGhostText}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   )
 }
 
@@ -338,7 +322,7 @@ const CONTROL_HEIGHT = 48
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    paddingTop: 24,
+    paddingTop: 40, // 👈 margen de 40 arriba del contenido
   },
   headerRow: {
     flexDirection: 'row',
