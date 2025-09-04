@@ -139,14 +139,17 @@ export default function CrearEmpresaMovil() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-        {/* Header */}
+        {/* Header: botón volver arriba */}
         <View style={styles.headerRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.btnBack}>
             <Ionicons name="chevron-back" size={20} color="#fff" />
             <Text style={styles.btnBackText}>Volver</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>Nueva empresa / cliente</Text>
         </View>
+
+        {/* Título DEBAJO del botón (bold, 22) */}
+        <Text style={styles.title}>Nueva empresa / cliente</Text>
+
         <Text style={styles.sub}>Completá los datos. El CUIT es opcional.</Text>
 
         {/* Alerts */}
@@ -320,7 +323,7 @@ const CONTROL_HEIGHT = 48
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    paddingTop: 70, // 👈 margen superior para que no lo tape el notch
+    paddingTop: 70, // margen superior para que no lo tape el notch
   },
   headerRow: {
     flexDirection: 'row',
@@ -341,11 +344,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginLeft: 4,
   },
+  // Título debajo del botón: bold 22
   title: {
-    flex: 1,
     fontSize: 22,
     fontWeight: 'bold',
     color: '#0f172a',
+    marginBottom: 4,
   },
   sub: { marginTop: 4, color: '#475569', marginBottom: 10 },
 

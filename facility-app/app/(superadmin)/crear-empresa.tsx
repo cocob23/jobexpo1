@@ -1,6 +1,7 @@
 // app/(superadmin)/empresas/crear.tsx
 import React, { useMemo, useRef, useState } from 'react'
 import {
+  Alert,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -11,7 +12,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
 import { supabase } from '@/constants/supabase'
@@ -91,7 +91,7 @@ export default function CrearEmpresaMovil() {
       setErr('Completá el nombre.')
       return
     }
-    // ✅ Sin validación de CUIT (opcional, cualquier formato)
+    // ✅ Sin validación de CUIT (el usuario puede escribir con guiones, espacios, etc.)
 
     setLoading(true)
     try {
@@ -99,7 +99,7 @@ export default function CrearEmpresaMovil() {
 
       const payload = {
         nombre: f.nombre.trim(),
-        cuit: f.cuit ? f.cuit.trim() : null, // ✅ se guarda tal cual
+        cuit: f.cuit ? f.cuit.trim() : null, // ✅ Se guarda tal cual
         email: f.email || null,
         telefono: f.telefono || null,
         direccion: f.direccion || null,
@@ -134,142 +134,143 @@ export default function CrearEmpresaMovil() {
   }
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }} edges={['top']}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
-          {/* Header */}
-          <View style={styles.headerRow}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.btnBack}>
-              <Ionicons name="chevron-back" size={20} color="#fff" />
-              <Text style={styles.btnBackText}>Volver</Text>
-            </TouchableOpacity>
-            <Text style={styles.title}>Nueva empresa / cliente</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1, backgroundColor: '#f8fafc' }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+        {/* Header: botón volver arriba */}
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.btnBack}>
+            <Ionicons name="chevron-back" size={20} color="#fff" />
+            <Text style={styles.btnBackText}>Volver</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Título DEBAJO del botón (bold, 22) */}
+        <Text style={styles.title}>Nueva empresa / cliente</Text>
+
+        <Text style={styles.sub}>Completá los datos. El CUIT es opcional.</Text>
+
+        {/* Alerts */}
+        {err ? (
+          <View style={[styles.alert, styles.alertError]}>
+            <Text style={styles.alertTextError}>{err}</Text>
           </View>
-          <Text style={styles.sub}>Completá los datos. El CUIT es opcional.</Text>
+        ) : null}
+        {ok ? (
+          <View style={[styles.alert, styles.alertOk]}>
+            <Text style={styles.alertTextOk}>{ok}</Text>
+          </View>
+        ) : null}
 
-          {/* Alerts */}
-          {err ? (
-            <View style={[styles.alert, styles.alertError]}>
-              <Text style={styles.alertTextError}>{err}</Text>
-            </View>
-          ) : null}
-          {ok ? (
-            <View style={[styles.alert, styles.alertOk]}>
-              <Text style={styles.alertTextOk}>{ok}</Text>
-            </View>
-          ) : null}
+        {/* Form */}
+        <View style={styles.card}>
+          <Field
+            label="Nombre *"
+            value={f.nombre}
+            placeholder="Cliente Demo S.A."
+            onChangeText={v => onChange('nombre', v)}
+            onFocus={() => setFocusKey('nombre')}
+            onBlur={() => setFocusKey(null)}
+            focused={focusKey === 'nombre'}
+            inputRef={nombreRef}
+            autoFocus
+            returnKeyType="next"
+          />
 
-          {/* Form */}
-          <View style={styles.card}>
+          <View style={styles.row2}>
             <Field
-              label="Nombre *"
-              value={f.nombre}
-              placeholder="Cliente Demo S.A."
-              onChangeText={v => onChange('nombre', v)}
-              onFocus={() => setFocusKey('nombre')}
+              label="CUIT (opcional)"
+              value={f.cuit}
+              placeholder="30-12345678-9"
+              onChangeText={v => onChange('cuit', v)}
+              onFocus={() => setFocusKey('cuit')}
               onBlur={() => setFocusKey(null)}
-              focused={focusKey === 'nombre'}
-              inputRef={nombreRef}
-              autoFocus
-              returnKeyType="next"
+              focused={focusKey === 'cuit'}
+              keyboardType="default"   // ✅ permite guiones y cualquier caracter necesario
+              autoCapitalize="none"
             />
-
-            <View style={styles.row2}>
-              <Field
-                label="CUIT (opcional)"
-                value={f.cuit}
-                placeholder="30-12345678-9"
-                onChangeText={v => onChange('cuit', v)}
-                onFocus={() => setFocusKey('cuit')}
-                onBlur={() => setFocusKey(null)}
-                focused={focusKey === 'cuit'}
-                keyboardType="default"    // ✅ permite guiones/espacios
-                autoCapitalize="none"
-              />
-              <Field
-                label="Email"
-                value={f.email}
-                placeholder="contacto@cliente.com"
-                onChangeText={v => onChange('email', v)}
-                onFocus={() => setFocusKey('email')}
-                onBlur={() => setFocusKey(null)}
-                focused={focusKey === 'email'}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-            </View>
-
-            <View style={styles.row2}>
-              <Field
-                label="Teléfono"
-                value={f.telefono}
-                placeholder="011-1234-5678"
-                onChangeText={v => onChange('telefono', v)}
-                onFocus={() => setFocusKey('telefono')}
-                onBlur={() => setFocusKey(null)}
-                focused={focusKey === 'telefono'}
-                keyboardType="phone-pad"
-              />
-              <Field
-                label="Dirección"
-                value={f.direccion}
-                placeholder="Av. Siempreviva 742"
-                onChangeText={v => onChange('direccion', v)}
-                onFocus={() => setFocusKey('direccion')}
-                onBlur={() => setFocusKey(null)}
-                focused={focusKey === 'direccion'}
-              />
-            </View>
-
-            <View style={styles.row2}>
-              <Field
-                label="Localidad"
-                value={f.localidad}
-                placeholder="CABA"
-                onChangeText={v => onChange('localidad', v)}
-                onFocus={() => setFocusKey('localidad')}
-                onBlur={() => setFocusKey(null)}
-                focused={focusKey === 'localidad'}
-              />
-              <Field
-                label="Provincia"
-                value={f.provincia}
-                placeholder="Buenos Aires"
-                onChangeText={v => onChange('provincia', v)}
-                onFocus={() => setFocusKey('provincia')}
-                onBlur={() => setFocusKey(null)}
-                focused={focusKey === 'provincia'}
-              />
-            </View>
-
-            {/* Actions */}
-            <View style={styles.actions}>
-              <TouchableOpacity
-                style={[styles.btnPrimary, disabled && styles.btnDisabled]}
-                onPress={submit}
-                disabled={disabled}
-              >
-                {loading ? (
-                  <ActivityIndicator />
-                ) : (
-                  <Text style={styles.btnPrimaryText}>Crear empresa</Text>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.btnGhost}
-                onPress={() => router.back()}
-              >
-                <Text style={styles.btnGhostText}>Cancelar</Text>
-              </TouchableOpacity>
-            </View>
+            <Field
+              label="Email"
+              value={f.email}
+              placeholder="contacto@cliente.com"
+              onChangeText={v => onChange('email', v)}
+              onFocus={() => setFocusKey('email')}
+              onBlur={() => setFocusKey(null)}
+              focused={focusKey === 'email'}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+
+          <View style={styles.row2}>
+            <Field
+              label="Teléfono"
+              value={f.telefono}
+              placeholder="011-1234-5678"
+              onChangeText={v => onChange('telefono', v)}
+              onFocus={() => setFocusKey('telefono')}
+              onBlur={() => setFocusKey(null)}
+              focused={focusKey === 'telefono'}
+              keyboardType="phone-pad"
+            />
+            <Field
+              label="Dirección"
+              value={f.direccion}
+              placeholder="Av. Siempreviva 742"
+              onChangeText={v => onChange('direccion', v)}
+              onFocus={() => setFocusKey('direccion')}
+              onBlur={() => setFocusKey(null)}
+              focused={focusKey === 'direccion'}
+            />
+          </View>
+
+          <View style={styles.row2}>
+            <Field
+              label="Localidad"
+              value={f.localidad}
+              placeholder="CABA"
+              onChangeText={v => onChange('localidad', v)}
+              onFocus={() => setFocusKey('localidad')}
+              onBlur={() => setFocusKey(null)}
+              focused={focusKey === 'localidad'}
+            />
+            <Field
+              label="Provincia"
+              value={f.provincia}
+              placeholder="Buenos Aires"
+              onChangeText={v => onChange('provincia', v)}
+              onFocus={() => setFocusKey('provincia')}
+              onBlur={() => setFocusKey(null)}
+              focused={focusKey === 'provincia'}
+            />
+          </View>
+
+          {/* Actions */}
+          <View style={styles.actions}>
+            <TouchableOpacity
+              style={[styles.btnPrimary, disabled && styles.btnDisabled]}
+              onPress={submit}
+              disabled={disabled}
+            >
+              {loading ? (
+                <ActivityIndicator />
+              ) : (
+                <Text style={styles.btnPrimaryText}>Crear empresa</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.btnGhost}
+              onPress={() => router.back()}
+            >
+              <Text style={styles.btnGhostText}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   )
 }
 
@@ -322,7 +323,7 @@ const CONTROL_HEIGHT = 48
 const styles = StyleSheet.create({
   container: {
     padding: 16,
-    paddingTop: 40, // 👈 margen de 40 arriba del contenido
+    paddingTop: 70, // margen superior para que no lo tape el notch
   },
   headerRow: {
     flexDirection: 'row',
@@ -343,11 +344,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginLeft: 4,
   },
+  // Título debajo del botón: bold 22
   title: {
-    flex: 1,
     fontSize: 22,
     fontWeight: 'bold',
     color: '#0f172a',
+    marginBottom: 4,
   },
   sub: { marginTop: 4, color: '#475569', marginBottom: 10 },
 
