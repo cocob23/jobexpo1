@@ -327,10 +327,10 @@ export default function PerfilTecnico() {
           <TouchableOpacity style={styles.boton} onPress={() => subirDocumento('acta')}>
             <Text style={styles.botonTexto}>Subir acta de compromiso</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.boton, { backgroundColor: '#16a34a' }]} onPress={() => descargarArchivo('poliza')}>
+          <TouchableOpacity style={[styles.boton, { backgroundColor: '#22c55e' }]} onPress={() => descargarArchivo('poliza')}>
             <Text style={styles.botonTexto}>Descargar póliza de seguro</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.boton, { backgroundColor: '#16a34a' }]} onPress={() => descargarArchivo('acta')}>
+          <TouchableOpacity style={[styles.boton, { backgroundColor: '#22c55e' }]} onPress={() => descargarArchivo('acta')}>
             <Text style={styles.botonTexto}>Descargar acta de compromiso</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.boton, { backgroundColor: '#ef4444' }]} onPress={() => eliminarDocumento('poliza')}>

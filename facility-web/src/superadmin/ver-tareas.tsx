@@ -431,9 +431,9 @@ const styles: { [k: string]: React.CSSProperties } = {
     letterSpacing: .3,
   },
   badgeOk: {
-    background: '#16a34a',
-    color: '#ffffff',
-    border: '1px solid #15803d',
+    background: '#dcfce7',
+    color: '#166534',
+    border: '1px solid #86efac',
   },
   badgePending: {
     background: '#fee2e2',
