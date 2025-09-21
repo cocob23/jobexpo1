@@ -84,7 +84,7 @@ export default function IndexMantenimiento() {
                 style={[
                 styles.cardEstado,
                 tarea.estado === 'Pendiente' && { color: '#dc2626' }, // rojo
-                 tarea.estado === 'Realizado' && { color: '#16a34a' }  // verde
+                 tarea.estado === 'Realizado' && { color: '#15803d' }  // verde más oscuro
                ]}
               >
   {tarea.estado}
