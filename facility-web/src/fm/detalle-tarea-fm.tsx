@@ -277,7 +277,7 @@ export default function DetalleTareaFM() {
                       <span style={styles.checklistIcon}>
                         {item.hecho ? '✅' : '⏳'}
                       </span>
-                      <span style={{ ...styles.textoChecklist, color: item.hecho ? '#ffffff' : '#111' }}>{item.texto}</span>
+                      <span style={styles.textoChecklist}>{item.texto}</span>
                     </div>
                   ))}
                 </div>
@@ -371,8 +371,8 @@ const styles: { [key: string]: React.CSSProperties } = {
     gap: '12px',
   },
   itemChecklistHecho: {
-    borderColor: '#15803d',
-    backgroundColor: '#16a34a',
+    borderColor: '#22c55e',
+    backgroundColor: '#dcfce7',
   },
   itemChecklistPendiente: {
     borderColor: '#ef4444',

@@ -138,7 +138,7 @@ export default function DetalleTareaScreen() {
                     item.hecho ? styles.itemChecklistHecho : styles.itemChecklistPendiente,
                   ]}
                 >
-                  <Text style={[styles.textoChecklist, item.hecho && { color: '#ffffff' }]}>{item.texto}</Text>
+                  <Text style={styles.textoChecklist}>{item.texto}</Text>
                 </View>
               ))
             ) : (
@@ -215,8 +215,8 @@ const styles = StyleSheet.create({
     marginVertical: 4,
   },
   itemChecklistHecho: {
-    borderColor: '#15803d',
-    backgroundColor: '#16a34a',
+    borderColor: '#22c55e',
+    backgroundColor: '#dcfce7',
   },
   itemChecklistPendiente: {
     borderColor: '#ef4444',

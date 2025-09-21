@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   aprobado: {
-    color: '#15803d',
+    color: '#22c55e',
   },
   desaprobado: {
     color: '#ef4444',

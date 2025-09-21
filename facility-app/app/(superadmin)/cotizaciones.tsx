@@ -42,7 +42,7 @@ type Cotizacion = {
 
 const ESTADO_COLOR: Record<Estado, { bg: string; border: string; text: string }> = {
   cotizado:    { bg: '#E0EAFF', border: '#BFDBFE', text: '#1E40AF' },
-  aprobado:    { bg: '#16a34a', border: '#15803d', text: '#ffffff' },
+  aprobado:    { bg: '#DCFCE7', border: '#BBF7D0', text: '#166534' },
   cerrado:     { bg: '#F1F5F9', border: '#E2E8F0', text: '#334155' },
   facturado:   { bg: '#FEF3C7', border: '#FDE68A', text: '#92400E' },
   desestimado: { bg: '#FEE2E2', border: '#FCA5A5', text: '#991B1B' },
