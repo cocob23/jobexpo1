@@ -11,6 +11,7 @@ import {
   FaCalculator,
   FaBuilding,
   FaShieldAlt,
+  FaBoxOpen,
 } from 'react-icons/fa'
 import { Card } from '../components/ui'
 
@@ -30,6 +31,15 @@ export default function SuperadminIndex() {
   }, [])
 
   const menuItems = [
+    {
+      title: 'Inventario de Armas',
+      description: 'Gestionar armamento y equipos tácticos',
+      icon: FaShieldAlt,
+      path: '/superadmin/inventario-armas',
+      color: 'var(--gradient-primary)',
+      bgColor: 'var(--primary-50)',
+      featured: true,
+    },
     {
       title: 'Crear Usuario',
       description: 'Añadir nuevos usuarios al sistema',
@@ -112,6 +122,9 @@ export default function SuperadminIndex() {
     },
   ]
 
+  const featuredItems = menuItems.filter(item => item.featured)
+  const regularItems = menuItems.filter(item => !item.featured)
+
   return (
     <div style={styles.wrapper}>
       <div style={styles.container} className="fade-in">
@@ -122,19 +135,19 @@ export default function SuperadminIndex() {
           </div>
           <h1 style={styles.title}>Panel de Administración</h1>
           <p style={styles.subtitle}>
-            Bienvenido, Superadmin. Desde aquí puedes gestionar todo el sistema
+            Bienvenido, Superadmin. Gestiona el sistema de armamento y equipos tácticos
           </p>
         </div>
 
         {/* Stats Cards */}
         <div style={styles.statsContainer}>
           <Card variant="elevated" padding="md" style={styles.statCard}>
-            <h3 style={styles.statNumber}>12</h3>
-            <p style={styles.statLabel}>Usuarios Activos</p>
+            <h3 style={styles.statNumber}>47</h3>
+            <p style={styles.statLabel}>Armas en Stock</p>
           </Card>
           <Card variant="elevated" padding="md" style={styles.statCard}>
-            <h3 style={{ ...styles.statNumber, color: 'var(--success-500)' }}>8</h3>
-            <p style={styles.statLabel}>Tareas Completadas</p>
+            <h3 style={{ ...styles.statNumber, color: 'var(--success-500)' }}>12</h3>
+            <p style={styles.statLabel}>Usuarios Activos</p>
           </Card>
           <Card variant="elevated" padding="md" style={styles.statCard}>
             <h3 style={{ ...styles.statNumber, color: 'var(--secondary-500)' }}>3</h3>
@@ -142,45 +155,89 @@ export default function SuperadminIndex() {
           </Card>
         </div>
 
-        {/* Menu Grid */}
-        <div style={styles.grid}>
-          {menuItems.map((item, index) => {
-            const Icon = item.icon
-            return (
-              <Card
-                key={index}
-                variant="elevated"
-                padding="lg"
-                style={{ 
-                  ...styles.menuCard,
-                  animationDelay: `${index * 0.1}s`,
-                }}
-                className="slide-in"
-                onClick={() => navigate(item.path)}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-5px) scale(1.02)'
-                  e.currentTarget.style.boxShadow = 'var(--shadow-xl)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0) scale(1)'
-                  e.currentTarget.style.boxShadow = 'var(--shadow-lg)'
-                }}
-              >
-                <div 
+        {/* Featured Items */}
+        {featuredItems.length > 0 && (
+          <div style={styles.section}>
+            <h2 style={styles.sectionTitle}>🏆 Acceso Rápido</h2>
+            <div style={styles.featuredGrid}>
+              {featuredItems.map((item, index) => {
+                const Icon = item.icon
+                return (
+                  <Card
+                    key={index}
+                    variant="gradient"
+                    padding="lg"
+                    style={{ 
+                      ...styles.featuredCard,
+                      animationDelay: `${index * 0.1}s`,
+                    }}
+                    className="slide-in"
+                    onClick={() => navigate(item.path)}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-8px) scale(1.03)'
+                      e.currentTarget.style.boxShadow = 'var(--shadow-2xl)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0) scale(1)'
+                      e.currentTarget.style.boxShadow = 'var(--shadow-glow)'
+                    }}
+                  >
+                    <div style={styles.featuredIconContainer}>
+                      <Icon style={styles.featuredIcon} />
+                    </div>
+                    <div style={styles.featuredContent}>
+                      <h3 style={styles.featuredTitle}>{item.title}</h3>
+                      <p style={styles.featuredDescription}>{item.description}</p>
+                    </div>
+                  </Card>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Regular Menu Grid */}
+        <div style={styles.section}>
+          <h2 style={styles.sectionTitle}>📋 Todas las Funciones</h2>
+          <div style={styles.grid}>
+            {regularItems.map((item, index) => {
+              const Icon = item.icon
+              return (
+                <Card
+                  key={index}
+                  variant="elevated"
+                  padding="lg"
                   style={{ 
-                    ...styles.cardIcon,
-                    background: item.color,
+                    ...styles.menuCard,
+                    animationDelay: `${(index + featuredItems.length) * 0.1}s`,
+                  }}
+                  className="slide-in"
+                  onClick={() => navigate(item.path)}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-5px) scale(1.02)'
+                    e.currentTarget.style.boxShadow = 'var(--shadow-xl)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0) scale(1)'
+                    e.currentTarget.style.boxShadow = 'var(--shadow-lg)'
                   }}
                 >
-                  <Icon style={styles.cardIconElement} />
-                </div>
-                <div style={styles.cardContent}>
-                  <h3 style={styles.cardTitle}>{item.title}</h3>
-                  <p style={styles.cardDescription}>{item.description}</p>
-                </div>
-              </Card>
-            )
-          })}
+                  <div 
+                    style={{ 
+                      ...styles.cardIcon,
+                      background: item.color,
+                    }}
+                  >
+                    <Icon style={styles.cardIconElement} />
+                  </div>
+                  <div style={styles.cardContent}>
+                    <h3 style={styles.cardTitle}>{item.title}</h3>
+                    <p style={styles.cardDescription}>{item.description}</p>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
         </div>
       </div>
     </div>
@@ -264,6 +321,76 @@ const styles: { [key: string]: React.CSSProperties } = {
     color: 'var(--neutral-600)',
     margin: 0,
     fontWeight: '500',
+  },
+
+  section: {
+    marginBottom: '3rem',
+  },
+
+  sectionTitle: {
+    fontSize: '1.5rem',
+    fontWeight: '700',
+    color: 'var(--neutral-800)',
+    margin: '0 0 1.5rem 0',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.5rem',
+  },
+
+  featuredGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+    gap: '2rem',
+    marginBottom: '2rem',
+  },
+
+  featuredCard: {
+    cursor: 'pointer',
+    transition: 'all 0.3s ease',
+    background: 'var(--gradient-hero)',
+    color: 'white',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '1.5rem',
+    minHeight: '140px',
+    position: 'relative',
+    overflow: 'hidden',
+  },
+
+  featuredIconContainer: {
+    width: '4rem',
+    height: '4rem',
+    borderRadius: '1rem',
+    background: 'rgba(255, 255, 255, 0.2)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    backdropFilter: 'blur(10px)',
+  },
+
+  featuredIcon: {
+    fontSize: '2rem',
+    color: 'white',
+  },
+
+  featuredContent: {
+    flex: 1,
+  },
+
+  featuredTitle: {
+    fontSize: '1.375rem',
+    fontWeight: '700',
+    color: 'white',
+    margin: '0 0 0.5rem 0',
+    lineHeight: '1.3',
+  },
+
+  featuredDescription: {
+    fontSize: '1rem',
+    color: 'rgba(255, 255, 255, 0.9)',
+    margin: 0,
+    lineHeight: '1.4',
   },
 
   grid: {
