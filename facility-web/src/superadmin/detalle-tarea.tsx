@@ -296,7 +296,7 @@ export default function DetalleTareaSuperadmin() {
                       <span style={styles.checklistIcon}>
                         {item.hecho ? '✅' : '⏳'}
                       </span>
-                      <span style={styles.textoChecklist}>{item.texto}</span>
+                      <span style={{ ...styles.textoChecklist, color: item.hecho ? '#ffffff' : '#111' }}>{item.texto}</span>
                     </div>
                   ))}
                 </div>
@@ -335,7 +335,7 @@ const styles: { [key: string]: React.CSSProperties } = {
   texto: { fontSize: '1rem', color: '#1f2937', flex: 1 },
   checklistContainer: { display: 'flex', flexDirection: 'column', gap: '0.5rem' },
   itemChecklist: { display: 'flex', alignItems: 'center', padding: '12px', borderRadius: '8px', border: '2px solid', gap: '12px' },
-  itemChecklistHecho: { borderColor: '#22c55e', backgroundColor: '#dcfce7' },
+  itemChecklistHecho: { borderColor: '#15803d', backgroundColor: '#16a34a' },
   itemChecklistPendiente: { borderColor: '#ef4444', backgroundColor: '#fee2e2' },
   checklistIcon: { fontSize: '1.2rem' },
   textoChecklist: { fontSize: '1rem', color: '#111', flex: 1 },

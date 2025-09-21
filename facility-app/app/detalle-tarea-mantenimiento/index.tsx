@@ -419,7 +419,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginVertical: 4,
   },
-  itemChecklistHecho: { backgroundColor: '#22c55e' },
+  itemChecklistHecho: { backgroundColor: '#16a34a' },
 
   botonPrincipal: {
     backgroundColor: '#2563EB',
