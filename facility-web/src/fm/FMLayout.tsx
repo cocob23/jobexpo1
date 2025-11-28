@@ -2,6 +2,7 @@
 import { Outlet, useNavigate } from 'react-router-dom'
 import ProtectedRoute from '../components/ProtectedRoute'
 import { supabase } from '../lib/supabase'
+import './responsive.css'
 
 export default function FMLayout() {
   const navigate = useNavigate()
