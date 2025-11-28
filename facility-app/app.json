@@ -1,29 +1,44 @@
 {
   "expo": {
-    "name": "facility-app",
+    "name": "Facility",
     "slug": "facility-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
-    "scheme": "facilityapp",
+    "icon": "./assets/images/icon-square.png",
+    "scheme": "facility",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+  "newArchEnabled": true,
+
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cocob23.facility"
     },
+
     "android": {
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
+      "package": "com.cocob23.facility",
       "edgeToEdgeEnabled": true,
-      "package": "com.cocob23.facilityapp"
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "INTERNET"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "TU_API_KEY_DE_GOOGLE_MAPS"
+        }
+      },
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon-square.png",
+        "backgroundColor": "#ffffff"
+      }
     },
+
     "web": {
       "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/favicon.png"
     },
+
     "plugins": [
       "expo-router",
       [
@@ -35,11 +50,25 @@
           "backgroundColor": "#ffffff"
         }
       ],
-      "expo-build-properties"
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableProguardInReleaseBuilds": false,
+            "newArchEnabled": true,
+            "kotlinVersion": "1.9.25"
+          },
+          "ios": {
+            "newArchEnabled": true
+          }
+        }
+      ]
     ],
+
     "experiments": {
       "typedRoutes": true
     },
+
     "extra": {
       "router": {},
       "eas": {
