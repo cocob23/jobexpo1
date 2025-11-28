@@ -55,8 +55,7 @@
         {
           "android": {
             "enableProguardInReleaseBuilds": false,
-            "newArchEnabled": true,
-            "kotlinVersion": "1.9.25"
+            "newArchEnabled": true
           },
           "ios": {
             "newArchEnabled": true
