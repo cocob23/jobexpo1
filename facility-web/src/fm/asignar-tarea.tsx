@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import './responsive.css'
 
 type UsuarioBase = { id: string; nombre: string; apellido: string }
 type EmpresaMin = { id: string; nombre: string }

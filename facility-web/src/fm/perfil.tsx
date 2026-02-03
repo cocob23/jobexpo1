@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type React from 'react'
+import './responsive.css'
 
 export default function PerfilFM() {
   const navigate = useNavigate()

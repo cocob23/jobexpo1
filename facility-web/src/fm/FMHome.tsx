@@ -12,12 +12,16 @@ import {
   FaMapMarkerAlt,
   FaBuilding, // ⬅️ agregado
 } from 'react-icons/fa'
+import './responsive.css'
 
 export default function FMHome() {
   const navigate = useNavigate()
 
-  // Evitar scroll fantasma
+  // Evitar scroll fantasma solo en desktop
   useEffect(() => {
+    const isMobile = window.innerWidth <= 768
+    if (isMobile) return // No aplicar overflow hidden en mobile
+
     const prevOverflow = document.body.style.overflow
     const prevBg = document.body.style.backgroundColor
     document.body.style.overflow = 'hidden'
@@ -79,6 +83,10 @@ export default function FMHome() {
           <button style={styles.card} onClick={() => navigate('/fm/llegadas')}>
             <FaMapMarkerAlt size={32} />
             <span>Ver Llegadas</span>
+          </button>
+          <button style={styles.card} onClick={() => navigate('/fm/recorridos')}>
+            <FaMapMarkerAlt size={32} />
+            <span>Recorridos</span>
           </button>
         </div>
       </div>

@@ -35,9 +35,14 @@ export default function SuperadminIndex() {
         <p style={styles.subtitle}>Bienvenido, Superadmin. ¿Qué querés hacer hoy?</p>
 
         <div style={styles.grid}>
+          {/* Inventario */}
+          <button style={styles.card} onClick={() => navigate('/superadmin/inventario')}>
+            <FaClipboardList size={32} />
+            <span>Inventario</span>
+          </button>
           <button style={styles.card} onClick={() => navigate('/superadmin/crear-usuario')}>
             <FaUserPlus size={32} />
-            <span>Crear Usuario</span>
+            <span>Administrar Usuarios</span>
           </button>
 
           <button style={styles.card} onClick={() => navigate('/superadmin/tecnicos')}>
@@ -72,9 +77,9 @@ export default function SuperadminIndex() {
             <span>Ver Tickets</span>
           </button>
 
-          <button style={styles.card} onClick={() => navigate('/superadmin/tecnicos')}>
+          <button style={styles.card} onClick={() => navigate('/superadmin/perfiles')}>
             <FaUserTie size={32} />
-            <span>Perfil Técnico</span>
+            <span>Perfiles</span>
           </button>
 
           <button style={styles.card} onClick={() => navigate('/superadmin/llegadas')}>
@@ -84,7 +89,15 @@ export default function SuperadminIndex() {
 
           <button style={styles.card} onClick={() => navigate('/superadmin/cotizaciones')}>
             <FaCalculator size={32} />
-            <span>Gestionar Cotizaciones</span>
+            <span>Ver Cotizaciones</span>
+          </button>
+          <button style={styles.card} onClick={() => navigate('/superadmin/cotizaciones/crear')}>
+            <FaCalculator size={32} />
+            <span>Crear Cotización</span>
+          </button>
+          <button style={styles.card} onClick={() => navigate('/superadmin/recorridos')}>
+            <FaMapMarkerAlt size={32} />
+            <span>Recorridos</span>
           </button>
         </div>
       </div>

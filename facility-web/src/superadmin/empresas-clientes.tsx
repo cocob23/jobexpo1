@@ -11,10 +11,13 @@ import {
   IoSearchOutline,
 } from 'react-icons/io5'
 import { supabase } from '../lib/supabase'
+import './responsive.css'
+import { useToast } from '../components/ToastProvider'
 
 type Empresa = {
   id: string
   nombre: string
+  alias: string | null
   cuit: string | null
   email: string | null
   telefono: string | null
@@ -33,6 +36,7 @@ const fmtCUIT = (c: string | null) => {
 
 export default function EmpresasClientesSA() {
   const navigate = useNavigate()
+  const toast = useToast()
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -43,12 +47,14 @@ export default function EmpresasClientesSA() {
   const [appliedTerm, setAppliedTerm] = useState('') // se aplica al tocar "Buscar"
 
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState<Partial<Empresa>>({})
 
   const fetchEmpresas = useCallback(async () => {
     setError(null)
     const { data, error } = await supabase
       .from('empresas')
-      .select('id,nombre,cuit,email,telefono,direccion,localidad,provincia,slug')
+      .select('id,nombre,alias,cuit,email,telefono,direccion,localidad,provincia,slug')
       .order('nombre', { ascending: true })
     if (error) {
       setError(error.message || 'No se pudo cargar el listado.')
@@ -65,7 +71,7 @@ export default function EmpresasClientesSA() {
   const filtered = useMemo(() => {
     const q = appliedTerm.trim().toLowerCase()
     if (!q) return list
-    return list.filter((e) => e.nombre.toLowerCase().includes(q))
+    return list.filter((e) => (e.nombre?.toLowerCase()?.includes(q)) || (e.alias?.toLowerCase()?.includes(q)))
   }, [list, appliedTerm])
 
   const onSearch = () => setAppliedTerm(term)
@@ -86,6 +92,40 @@ export default function EmpresasClientesSA() {
       alert(e?.message || 'No se pudo eliminar la empresa.')
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  const startEdit = (row: Empresa) => {
+    setEditingId(row.id)
+    setEditForm({ ...row })
+  }
+
+  const cancelEdit = () => {
+    setEditingId(null)
+    setEditForm({})
+  }
+
+  const saveEdit = async () => {
+    if (!editingId) return
+    try {
+      const payload = {
+        nombre: editForm.nombre ?? null,
+        alias: (editForm as any).alias ?? null,
+        cuit: editForm.cuit ?? null,
+        email: editForm.email ?? null,
+        telefono: editForm.telefono ?? null,
+        direccion: editForm.direccion ?? null,
+        localidad: editForm.localidad ?? null,
+        provincia: editForm.provincia ?? null,
+      }
+      const { error } = await supabase.from('empresas').update(payload).eq('id', editingId)
+      if (error) throw error
+      setList(xs => xs.map(e => e.id === editingId ? { ...e, ...payload } as Empresa : e))
+      toast.success('Empresa actualizada')
+      cancelEdit()
+    } catch (e: any) {
+      console.error(e)
+      toast.error(e.message || 'No se pudo actualizar la empresa')
     }
   }
 
@@ -155,7 +195,7 @@ export default function EmpresasClientesSA() {
             <div key={e.id} style={styles.card}>
               <div style={styles.cardHeader}>
                 <IoBusinessOutline size={20} color="#0F172A" />
-                <div style={styles.cardTitle}>{e.nombre}</div>
+                <div style={styles.cardTitle}>{e.nombre}{e.alias ? ` · ${e.alias}` : ''}</div>
 
                 <button
                   onClick={() => onDelete(e)}
@@ -166,6 +206,13 @@ export default function EmpresasClientesSA() {
                   <IoTrashOutline size={18} />
                 </button>
               </div>
+
+              {/* Botón editar */}
+              {editingId !== e.id ? (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                  <button style={styles.btnGhost} onClick={() => startEdit(e)}>Modificar</button>
+                </div>
+              ) : null}
 
               <div style={styles.row}>
                 <IoPricetagOutline size={18} color="#475569" />
@@ -200,6 +247,42 @@ export default function EmpresasClientesSA() {
                 <span style={styles.slugLabel}>slug</span>
                 <span style={styles.slugText}>{e.slug}</span>
               </div>
+
+              {/* Editor inline */}
+              {editingId === e.id && (
+                <div style={styles.editWrap}>
+                  <div style={styles.editGrid}>
+                    <label>Nombre
+                      <input style={styles.editInput} value={editForm.nombre || ''} onChange={e2 => setEditForm({ ...editForm, nombre: e2.target.value })} />
+                    </label>
+                    <label>Alias
+                      <input style={styles.editInput} value={(editForm as any).alias || ''} onChange={e2 => setEditForm({ ...editForm, alias: e2.target.value as any })} />
+                    </label>
+                    <label>CUIT
+                      <input style={styles.editInput} value={editForm.cuit || ''} onChange={e2 => setEditForm({ ...editForm, cuit: e2.target.value })} />
+                    </label>
+                    <label>Email
+                      <input style={styles.editInput} value={editForm.email || ''} onChange={e2 => setEditForm({ ...editForm, email: e2.target.value })} />
+                    </label>
+                    <label>Teléfono
+                      <input style={styles.editInput} value={editForm.telefono || ''} onChange={e2 => setEditForm({ ...editForm, telefono: e2.target.value })} />
+                    </label>
+                    <label>Dirección
+                      <input style={styles.editInput} value={editForm.direccion || ''} onChange={e2 => setEditForm({ ...editForm, direccion: e2.target.value })} />
+                    </label>
+                    <label>Localidad
+                      <input style={styles.editInput} value={editForm.localidad || ''} onChange={e2 => setEditForm({ ...editForm, localidad: e2.target.value })} />
+                    </label>
+                    <label>Provincia
+                      <input style={styles.editInput} value={editForm.provincia || ''} onChange={e2 => setEditForm({ ...editForm, provincia: e2.target.value })} />
+                    </label>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                    <button style={styles.btnPrimary} onClick={saveEdit}>Guardar</button>
+                    <button style={styles.btnGhost} onClick={cancelEdit}>Cancelar</button>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -229,21 +312,21 @@ const styles: Record<string, React.CSSProperties> = {
   },
   headerSlot: { width: BACK_SLOT_WIDTH, display: 'flex', alignItems: 'center' },
   backBtn: {
-    display: 'inline-block',
-    height: 40,
-    lineHeight: '40px',
-    padding: '0 14px',
-    borderRadius: 10,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '8px 14px',
+    borderRadius: 8,
     backgroundColor: '#6b7280',
     color: '#fff',
     border: 'none',
     fontSize: 14,
-    fontWeight: 700,
+    fontWeight: 600,
     cursor: 'pointer',
     boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
     textDecoration: 'none',
-    verticalAlign: 'middle',
     boxSizing: 'border-box',
+    whiteSpace: 'nowrap',
   },
   title: { margin: 0, fontSize: 20, fontWeight: 800, color: '#0F172A', textAlign: 'center' },
 
@@ -376,4 +459,8 @@ const styles: Record<string, React.CSSProperties> = {
   },
   slugLabel: { fontSize: 12, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 },
   slugText: { fontSize: 12, color: '#0f172a' },
+
+  editWrap: { marginTop: 10, paddingTop: 10, borderTop: '1px dashed #e5e7eb' },
+  editGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 },
+  editInput: { width: '100%', border: '1px solid #e2e8f0', borderRadius: 8, padding: '8px 10px' },
 }

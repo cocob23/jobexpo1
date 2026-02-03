@@ -34,8 +34,8 @@ function getProjectBaseUrl() {
   const anyClient = supabase as any
   if (anyClient?.restUrl) return String(anyClient.restUrl).replace('/rest/v1', '')
   if (anyClient?.storageUrl) return String(anyClient.storageUrl).replace('/storage/v1', '')
-  // @ts-ignore
-  if (import.meta?.env?.VITE_SUPABASE_URL) return import.meta.env.VITE_SUPABASE_URL as string
+  // Para Create React App, las variables de entorno usan process.env.REACT_APP_
+  if (process.env.REACT_APP_SUPABASE_URL) return process.env.REACT_APP_SUPABASE_URL as string
   return ''
 }
 

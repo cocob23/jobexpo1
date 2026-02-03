@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useToast } from '../components/ToastProvider'
 
 type UsuarioRef = {
   nombre: string | null
@@ -10,7 +11,8 @@ type UsuarioRef = {
 }
 
 type Ticket = {
-  id: number
+  id: string | number
+  numero?: number | null
   descripcion: string | null
   fecha_reporte: string | null
   estado: string | null
@@ -25,15 +27,36 @@ type TicketRaw = Omit<Ticket, 'usuarios'> & { usuarios: UsuarioRef | UsuarioRef[
 
 export default function Tickets() {
   const navigate = useNavigate()
+  const toast = useToast()
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [loading, setLoading] = useState(true)
   const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null)
+  const [tecnicos, setTecnicos] = useState<Array<{ id: string; nombre: string | null; apellido: string | null; email?: string | null }>>([])
+  const [tecSel, setTecSel] = useState<string>('')
+  const [tecQuery, setTecQuery] = useState<string>('')
+  const [showTecSuggest, setShowTecSuggest] = useState<boolean>(false)
+  const [desde, setDesde] = useState<string>('')
+  const [hasta, setHasta] = useState<string>('')
 
   useEffect(() => {
+    obtenerTecnicos()
     obtenerTickets()
   }, [])
 
-  const obtenerThumbDesdeStorage = async (ticketId: number) => {
+  useEffect(() => {
+    obtenerTickets()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tecSel, desde, hasta])
+
+  const limpiarFiltros = () => {
+    setTecSel('')
+    setTecQuery('')
+    setDesde('')
+    setHasta('')
+    obtenerTickets()
+  }
+
+  const obtenerThumbDesdeStorage = async (ticketId: string | number) => {
     const bucket = 'tickets'
     const { data: files, error } = await supabase.storage
       .from(bucket)
@@ -54,6 +77,7 @@ export default function Tickets() {
 
     return {
       id: row.id,
+      numero: (row as any).numero ?? null,
       descripcion: row.descripcion,
       fecha_reporte: row.fecha_reporte,
       estado: row.estado,
@@ -64,14 +88,25 @@ export default function Tickets() {
     }
   }
 
+  const obtenerTecnicos = async () => {
+    const { data, error } = await supabase
+      .from('usuarios')
+      .select('id, nombre, apellido, email, rol')
+      .in('rol', ['mantenimiento', 'mantenimiento-externo'])
+      .order('apellido', { ascending: true })
+    if (error) return
+    setTecnicos((data || []).map((u: any) => ({ id: u.id, nombre: u.nombre, apellido: u.apellido, email: u.email })))
+  }
+
   const obtenerTickets = async () => {
     try {
       setLoading(true)
 
-      const { data, error } = await supabase
+      let q = supabase
         .from('tickets')
         .select(`
           id,
+          numero,
           descripcion,
           fecha_reporte,
           estado,
@@ -85,6 +120,15 @@ export default function Tickets() {
           )
         `)
         .order('fecha_reporte', { ascending: false })
+
+      if (tecSel) q = q.eq('usuario_id', tecSel)
+
+      const desdeISO = desde ? new Date(`${desde}T00:00:00.000Z`).toISOString() : null
+      const hastaISO = hasta ? new Date(`${hasta}T23:59:59.999Z`).toISOString() : null
+      if (desdeISO) q = q.gte('fecha_reporte', desdeISO)
+      if (hastaISO) q = q.lte('fecha_reporte', hastaISO)
+
+      const { data, error } = await q
 
       if (error) {
         console.error('Error al obtener tickets:', error.message)
@@ -110,13 +154,29 @@ export default function Tickets() {
     }
   }
 
-  const actualizarEstado = async (id: number, nuevoEstado: 'Aprobado' | 'Desaprobado') => {
+  const actualizarEstado = async (id: string | number, nuevoEstado: 'Aprobado' | 'Desaprobado') => {
     const { error } = await supabase.from('tickets').update({ estado: nuevoEstado }).eq('id', id)
     if (error) {
       console.error('Error al actualizar ticket:', error.message)
+      toast.error('No se pudo actualizar: ' + error.message)
     } else {
+      toast.success('Estado actualizado')
       obtenerTickets()
     }
+  }
+
+  const eliminarTicket = async (id: string | number) => {
+    const confirmar = window.confirm(`¿Eliminar el ticket #${id}? Esta acción no se puede deshacer.`)
+    if (!confirmar) return
+    const { error } = await supabase.from('tickets').delete().eq('id', id)
+    if (error) {
+      console.error('Error al eliminar ticket:', error.message)
+      toast.error('No se pudo eliminar: ' + error.message)
+      return
+    }
+    // Refrescar lista
+    setTickets((prev) => prev.filter((t) => t.id !== id))
+    toast.success('Ticket eliminado')
   }
 
   const nombreUsuario = (t: Ticket) => {
@@ -133,9 +193,42 @@ export default function Tickets() {
           ← Volver
         </button>
         <h1 style={styles.title}>Gestión de Tickets</h1>
-        <button onClick={obtenerTickets} style={styles.btnPrimary}>
-          Actualizar
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', position: 'relative', flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            value={tecQuery}
+            onChange={(e) => { setTecQuery(e.target.value); setShowTecSuggest(true); }}
+            onFocus={() => setShowTecSuggest(true)}
+            placeholder="Buscar técnico por nombre/apellido/email"
+            style={styles.input}
+          />
+          {showTecSuggest && tecQuery.trim().length > 0 && (
+            <div style={styles.suggestBox} onMouseLeave={() => setShowTecSuggest(false)}>
+              {tecnicos
+                .filter((t) => {
+                  const q = tecQuery.trim().toLowerCase()
+                  const nom = (t.nombre ?? '').toLowerCase()
+                  const ape = (t.apellido ?? '').toLowerCase()
+                  const em = (t.email ?? '').toLowerCase()
+                  return nom.includes(q) || ape.includes(q) || em.includes(q) || `${ape} ${nom}`.includes(q)
+                })
+                .slice(0, 8)
+                .map((t) => (
+                  <div
+                    key={t.id}
+                    style={styles.suggestItem}
+                    onClick={() => { setTecSel(t.id); setTecQuery(`${t.apellido ?? ''} ${t.nombre ?? ''}`.trim() || (t.email ?? '')); setShowTecSuggest(false); }}
+                  >
+                    {`${t.apellido ?? ''} ${t.nombre ?? ''}`.trim() || (t.email ?? t.id)}
+                  </div>
+                ))}
+            </div>
+          )}
+          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} style={styles.input} />
+          <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} style={styles.input} />
+          <button onClick={obtenerTickets} style={styles.btnPrimary}>Aplicar filtros</button>
+          <button onClick={limpiarFiltros} style={styles.btnGray}>Limpiar filtros</button>
+        </div>
       </div>
 
       {loading ? (
@@ -161,7 +254,7 @@ export default function Tickets() {
                   )}
 
                   <div>
-                    <p style={styles.row}><strong>ID:</strong> {t.id}</p>
+                    <p style={styles.row}><strong>ID:</strong> {t.numero ?? t.id}</p>
                     <p style={styles.row}><strong>Usuario:</strong> {nombreUsuario(t)}</p>
                     <p style={styles.row}>
                       <strong>Fecha:</strong> {t.fecha_reporte ? new Date(t.fecha_reporte).toLocaleString() : '-'}
@@ -170,7 +263,10 @@ export default function Tickets() {
                 </div>
 
                 <div style={{ textAlign: 'right' }}>
-                  <p style={styles.row}><strong>Estado:</strong> {t.estado ?? 'Pendiente'}</p>
+                  <p style={styles.row}>
+                    <strong>Estado:</strong>{' '}
+                    <span style={estadoStyle(t.estado)}>{t.estado ?? 'Pendiente'}</span>
+                  </p>
                   <p style={styles.row}><strong>Importe:</strong> {t.importe != null ? `$${t.importe}` : '-'}</p>
                 </div>
               </div>
@@ -188,6 +284,10 @@ export default function Tickets() {
                 <button style={styles.btnDanger} onClick={() => actualizarEstado(t.id, 'Desaprobado')}>
                   Desaprobar
                 </button>
+                <div style={{ flex: 1 }} />
+                <button style={styles.btnDelete} onClick={() => eliminarTicket(t.id)}>
+                  Eliminar
+                </button>
               </div>
             </li>
           ))}
@@ -201,6 +301,20 @@ export default function Tickets() {
       )}
     </div>
   )
+}
+
+// Helper para estilos de estado (aprobado, desaprobado, pendiente)
+const estadoStyle = (estado: string | null): React.CSSProperties => {
+  const base: React.CSSProperties = { fontWeight: 700 }
+  const val = (estado || 'Pendiente').toLowerCase()
+  switch (val) {
+    case 'aprobado':
+      return { ...base, color: '#16a34a' } // verde
+    case 'desaprobado':
+      return { ...base, color: '#dc2626' } // rojo
+    default:
+      return { ...base, color: '#d97706' } // amarillo para pendiente u otros
+  }
 }
 
 const styles: { [k: string]: React.CSSProperties } = {
@@ -227,6 +341,12 @@ const styles: { [k: string]: React.CSSProperties } = {
   btnGray: { backgroundColor: '#6b7280', color: '#fff', border: 'none', padding: '10px 14px', borderRadius: 8, fontWeight: 600, cursor: 'pointer' },
   btnSuccess: { backgroundColor: '#16a34a', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer' },
   btnDanger: { backgroundColor: '#dc2626', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer' },
+  btnDelete: { backgroundColor: '#7f1d1d', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 600 },
+  suggestBox: {
+    position: 'absolute', top: '100%', left: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 10px rgba(0,0,0,0.08)',
+    zIndex: 10, width: 320, maxHeight: 240, overflow: 'auto'
+  },
+  suggestItem: { padding: '8px 10px', cursor: 'pointer', borderBottom: '1px solid #f1f5f9' },
 
   // Modal
   modalOverlay: {

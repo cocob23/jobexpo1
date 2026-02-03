@@ -12,6 +12,11 @@ type Llegada = {
   hora: string
   latitud: number
   longitud: number
+  // salida
+  salida_fecha: string | null
+  salida_hora: string | null
+  salida_latitud: number | null
+  salida_longitud: number | null
   usuarios: UsuarioMin | null
 }
 
@@ -36,8 +41,33 @@ export default function Llegadas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const norm = (u: UsuarioMin | UsuarioMin[] | null): UsuarioMin | null =>
+  const norm = (u: (UsuarioMin & { horario_llegada?: string | null }) | (UsuarioMin & { horario_llegada?: string | null })[] | null): (UsuarioMin & { horario_llegada?: string | null }) | null =>
     Array.isArray(u) ? (u[0] ?? null) : (u ?? null)
+  const [soloTardes, setSoloTardes] = useState(false)
+
+  const calcularDuracionMin = (l: { fecha?: string; hora?: string | null; salida_fecha?: string | null; salida_hora?: string | null }): number | null => {
+    if (!l.fecha || !l.hora || !l.salida_fecha || !l.salida_hora) return null
+    try {
+      const inDate = new Date(`${String(l.fecha).split('T')[0]}T${l.hora}`)
+      const outDate = new Date(`${String(l.salida_fecha).split('T')[0]}T${l.salida_hora}`)
+      const diffMs = outDate.getTime() - inDate.getTime()
+      if (!Number.isFinite(diffMs)) return null
+      const mins = Math.round(diffMs / 60000)
+      return mins < 0 ? null : mins
+    } catch {
+      return null
+    }
+  }
+
+  const esTarde = (hLlegada?: string | null, hHorario?: string | null) => {
+    if (!hLlegada || !hHorario) return false
+    const [hlH, hlM] = hLlegada.split(':').map(Number)
+    const [hhH, hhM] = hHorario.split(':').map(Number)
+    if ([hlH, hlM, hhH, hhM].some((v) => Number.isNaN(v))) return false
+    const llegadaMin = hlH * 60 + hlM
+    const horarioMin = hhH * 60 + hhM
+    return llegadaMin > (horarioMin + 10)
+  }
 
   const toISOStart = (d: string) => (d ? `${d}T00:00:00` : undefined)
   const toISOEnd = (d: string) => (d ? `${d}T23:59:59` : undefined)
@@ -60,7 +90,7 @@ export default function Llegadas() {
         .from('llegadas')
         .select(`
           *,
-          usuarios:usuario_id ( nombre, apellido )
+          usuarios:usuario_id ( nombre, apellido, horario_llegada )
         `)
         .order('fecha', { ascending: false })
 
@@ -90,13 +120,17 @@ export default function Llegadas() {
       if (error) throw error
 
       const rows = (data as LlegadaRaw[] | null) ?? []
-      const normalizadas: Llegada[] = rows.map((r) => ({
+      const normalizadas: (Llegada & { usuarios: (UsuarioMin & { horario_llegada?: string | null }) | null })[] = rows.map((r) => ({
         id: r.id,
         lugar: r.lugar,
         fecha: r.fecha,
         hora: r.hora,
         latitud: r.latitud,
         longitud: r.longitud,
+        salida_fecha: (r as any).salida_fecha ?? null,
+        salida_hora: (r as any).salida_hora ?? null,
+        salida_latitud: (r as any).salida_latitud ?? null,
+        salida_longitud: (r as any).salida_longitud ?? null,
         usuarios: norm(r.usuarios),
       }))
 
@@ -115,6 +149,7 @@ export default function Llegadas() {
     setLugarInput('')
     setFechaDesde('')
     setFechaHasta('')
+    setSoloTardes(false)
     aplicarFiltros({ nombre: '', lugar: '', desde: '', hasta: '' })
   }
 
@@ -194,6 +229,15 @@ export default function Llegadas() {
                 style={styles.inputDate}
               />
             </div>
+            <div style={styles.inputDateGroup}>
+              <input
+                id="sa-solo-tardes"
+                type="checkbox"
+                checked={soloTardes}
+                onChange={(e) => setSoloTardes(e.target.checked)}
+              />
+              <label htmlFor="sa-solo-tardes" style={styles.inputLabel}>Solo tardes</label>
+            </div>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
               <button onClick={limpiarFiltros} style={styles.btnLight}>
                 Limpiar
@@ -218,7 +262,15 @@ export default function Llegadas() {
                     <h3 style={styles.empleadoNombre}>
                       👤 {l.usuarios?.nombre} {l.usuarios?.apellido}
                     </h3>
-                    <span style={styles.fecha}>📅 {l.fecha.split('T')[0]}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={styles.fecha}>📅 {l.fecha.split('T')[0]}{l.hora ? ` • 🕒 ${l.hora}` : ''}</span>
+                      {esTarde(l.hora, (l as any).usuarios?.horario_llegada ?? null) && (
+                        <span style={styles.badgeLate}>Tarde</span>
+                      )}
+                      {calcularDuracionMin(l) != null && (
+                        <span style={styles.badgeDuration}>Duración: {calcularDuracionMin(l)} min</span>
+                      )}
+                    </div>
                   </div>
 
                   <div style={styles.llegadaInfo}>
@@ -226,13 +278,12 @@ export default function Llegadas() {
                       📍 <strong>Lugar:</strong> {l.lugar}
                     </p>
                     <p style={styles.texto}>
-                      🕒 <strong>Hora:</strong> {l.hora}
+                      🕒 <strong>Hora llegada:</strong> {l.hora}
                     </p>
                     <p style={styles.texto}>
-                      📌 <strong>Coordenadas:</strong> {l.latitud.toFixed(5)}, {l.longitud.toFixed(5)}
+                      📌 <strong>Coordenadas llegada:</strong> {l.latitud.toFixed(5)}, {l.longitud.toFixed(5)}
                     </p>
 
-                    {/* mini-mapa embebido y clickeable */}
                     {l.latitud != null && l.longitud != null && (
                       <div
                         style={styles.mapBox}
@@ -244,7 +295,7 @@ export default function Llegadas() {
                         title="Abrir en Google Maps"
                       >
                         <iframe
-                          title={`mapa-${l.id}`}
+                          title={`mapa-llegada-${l.id}`}
                           src={mapEmbedUrl(l.latitud, l.longitud, 15)}
                           style={styles.mapIframe as any}
                           loading="lazy"
@@ -253,6 +304,45 @@ export default function Llegadas() {
                         <div style={styles.mapHint}>Click para abrir en Google Maps</div>
                       </div>
                     )}
+
+                    {/* Sección de salida */}
+                    <div style={styles.salidaBox}>
+                      <h4 style={styles.subtitulo}>Salida</h4>
+                      {l.salida_hora ? (
+                        <>
+                          <p style={styles.texto}>
+                            🗓️ <strong>Fecha salida:</strong> {String(l.salida_fecha).split('T')[0]} • 🕒 {l.salida_hora}
+                          </p>
+                          {(l.salida_latitud != null && l.salida_longitud != null) && (
+                            <>
+                              <p style={styles.texto}>
+                                📌 <strong>Coordenadas salida:</strong> {Number(l.salida_latitud).toFixed(5)}, {Number(l.salida_longitud).toFixed(5)}
+                              </p>
+                              <div
+                                style={styles.mapBox}
+                                role="button"
+                                aria-label="Abrir en Google Maps"
+                                onClick={() => abrirMapa(Number(l.salida_latitud), Number(l.salida_longitud))}
+                                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && abrirMapa(Number(l.salida_latitud), Number(l.salida_longitud))}
+                                tabIndex={0}
+                                title="Abrir en Google Maps"
+                              >
+                                <iframe
+                                  title={`mapa-salida-${l.id}`}
+                                  src={mapEmbedUrl(Number(l.salida_latitud), Number(l.salida_longitud), 15)}
+                                  style={styles.mapIframe as any}
+                                  loading="lazy"
+                                  referrerPolicy="no-referrer-when-downgrade"
+                                />
+                                <div style={styles.mapHint}>Click para abrir en Google Maps</div>
+                              </div>
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        <p style={{ ...styles.texto, color: '#ef4444', fontWeight: 700 }}>Pendiente de salida</p>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -289,8 +379,28 @@ const styles: { [key: string]: React.CSSProperties } = {
   llegadaHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', paddingBottom: '0.5rem', borderBottom: '2px solid #e2e8f0' },
   empleadoNombre: { fontSize: '1.3rem', fontWeight: 600, color: '#1e40af', margin: 0 },
   fecha: { fontSize: '1rem', color: '#64748b', fontWeight: 500 },
+  badgeLate: {
+    display: 'inline-block',
+    backgroundColor: '#ef4444',
+    color: '#fff',
+    padding: '4px 8px',
+    borderRadius: 8,
+    fontSize: 12,
+    fontWeight: 700,
+  },
+  badgeDuration: {
+    display: 'inline-block',
+    backgroundColor: '#0ea5e9',
+    color: '#fff',
+    padding: '4px 8px',
+    borderRadius: 8,
+    fontSize: 12,
+    fontWeight: 700,
+  },
   llegadaInfo: { marginBottom: '1rem' },
   texto: { fontSize: '1rem', color: '#374151', marginBottom: '0.5rem', lineHeight: '1.5' },
+  subtitulo: { fontSize: '1.05rem', fontWeight: 700, color: '#1f2937', margin: '1rem 0 0.5rem' },
+  salidaBox: { marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px dashed #cbd5e1' },
 
   // mini-mapa
   mapBox: {

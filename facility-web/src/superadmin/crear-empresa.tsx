@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 
 type Form = {
   nombre: string
+  alias?: string
   cuit: string
   email: string
   telefono: string
@@ -14,6 +15,7 @@ type Form = {
 
 const initial: Form = {
   nombre: '',
+  alias: '',
   cuit: '',
   email: '',
   telefono: '',
@@ -100,6 +102,7 @@ export default function CrearEmpresa() {
 
     const payload = {
       nombre: f.nombre.trim(),
+      alias: f.alias?.trim() || null,
       cuit: f.cuit ? onlyDigits(f.cuit) : null,
       email: f.email || null,
       telefono: f.telefono || null,
@@ -155,6 +158,18 @@ export default function CrearEmpresa() {
               autoFocus
             />
           </div>
+
+            <div style={styles.row}>
+              <label style={styles.label}>Alias (opcional)</label>
+              <input
+                style={styles.input}
+                value={f.alias || ''}
+                onChange={e => onChange('alias', e.target.value)}
+                placeholder="Cliente Demo"
+                onFocus={focusOn}
+                onBlur={blurOn}
+              />
+            </div>
 
           <div style={styles.grid2}>
             <div>

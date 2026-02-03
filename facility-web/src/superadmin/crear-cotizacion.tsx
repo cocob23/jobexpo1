@@ -1,41 +1,15 @@
-// src/fm/cotizaciones.tsx
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import './responsive.css'
 import { useToast } from '../components/ToastProvider'
 
 type Estado = 'pendiente' | 'cotizado' | 'aprobado' | 'orden_compra_pendiente' | 'cerrado' | 'facturado' | 'desestimado'
 
-type Cotizacion = {
-  id: string
-  numero: number
-  cliente: string
-  descripcion: string | null
-  monto: number | null
-  fecha: string | null
-  estado: Estado
-  archivo_path: string | null
-  archivo_mimetype: string | null
-  creado_en: string
-  orden_compra_numero?: string | null
-}
-
-export default function CotizacionesFM() {
+export default function CrearCotizacionSuperadmin() {
   const navigate = useNavigate()
   const toast = useToast()
 
   const [meId, setMeId] = useState<string | null>(null)
-  const [cargando, setCargando] = useState(false)
-  const [listado, setListado] = useState<Cotizacion[]>([])
-
-  // Filtros
-  const [qId, setQId] = useState('')          // N° o UUID
-  const [qCliente, setQCliente] = useState('')
-  const [desde, setDesde] = useState('')
-  const [hasta, setHasta] = useState('')
-
-  // Form
   const [cliente, setCliente] = useState('')
   const [descripcion, setDescripcion] = useState('')
   const [monto, setMonto] = useState<string>('')
@@ -45,26 +19,15 @@ export default function CotizacionesFM() {
   const [subiendo, setSubiendo] = useState(false)
   const [numeroManual, setNumeroManual] = useState<string>('')
 
-  // Autocompletar clientes (empresas)
+  // Autocompletar clientes
   type EmpresaMin = { id: string; nombre: string }
   const [empresas, setEmpresas] = useState<EmpresaMin[]>([])
   const [mostrarSug, setMostrarSug] = useState(false)
 
-  // Helpers filtro ID/N°
-  const isUUID = (s: string) =>
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s.trim())
-  const parseNumero = (s: string) => {
-    const raw = s.trim().replace(/^#/, '')
-    const n = parseInt(raw, 10)
-    return Number.isFinite(n) ? n : null
-  }
-
   useEffect(() => {
     ;(async () => {
       const { data } = await supabase.auth.getUser()
-      const uid = data?.user?.id ?? null
-      setMeId(uid)
-      await cargarListado()
+      setMeId(data?.user?.id ?? null)
     })()
   }, [])
 
@@ -80,33 +43,10 @@ export default function CotizacionesFM() {
     if (!error) setEmpresas((data || []) as EmpresaMin[])
   }
 
-  const cargarListado = async () => {
-    setCargando(true)
-    let q = supabase.from('cotizaciones').select('*').order('numero', { ascending: false })
-
-    // Filtro por N°/UUID
-    if (qId.trim()) {
-      if (isUUID(qId)) {
-        q = q.eq('id', qId.trim())
-      } else {
-        const n = parseNumero(qId)
-        if (n !== null) q = q.eq('numero', n)
-      }
-    }
-
-    // Resto de filtros
-    if (qCliente) q = q.ilike('cliente', `%${qCliente}%`)
-    if (desde) q = q.gte('fecha', desde)
-    if (hasta) q = q.lte('fecha', hasta)
-
-    const { data, error } = await q
-    if (error) {
-      console.error(error)
-    } else if (data) {
-      setListado(data as Cotizacion[])
-    }
-    setCargando(false)
-  }
+  const estados: Estado[] = useMemo(
+    () => ['pendiente','cotizado','aprobado','orden_compra_pendiente','cerrado','facturado','desestimado'],
+    []
+  )
 
   const limpiarForm = () => {
     setCliente('')
@@ -139,7 +79,6 @@ export default function CotizacionesFM() {
 
     setSubiendo(true)
 
-    // 1) Insert preliminar para obtener numero
     const { data: inserted, error: insertErr } = await supabase
       .from('cotizaciones')
       .insert({
@@ -162,7 +101,6 @@ export default function CotizacionesFM() {
       return
     }
 
-    // 2) Subir a storage usando el numero
     const safeCliente = cliente.toLowerCase().replace(/[^a-z0-9-_]+/g, '-')
     const ext = (archivo.name.split('.').pop() || 'pdf').toLowerCase()
   const fileName = `${String(numeroInt).padStart(6, '0')}_${safeCliente}.${ext}`
@@ -178,7 +116,6 @@ export default function CotizacionesFM() {
       return
     }
 
-    // 3) Update con archivo_path (permitido por RLS update_owner)
     const { error: updErr } = await supabase.from('cotizaciones').update({ archivo_path: path }).eq('id', inserted.id)
 
     setSubiendo(false)
@@ -189,66 +126,18 @@ export default function CotizacionesFM() {
 
     toast.success(`Cotización COT-${String(numeroInt).padStart(6, '0')} creada`)
     limpiarForm()
-    cargarListado()
+    navigate('/superadmin/cotizaciones')
   }
-
-  const estados: Estado[] = useMemo(
-    () => ['pendiente','cotizado','aprobado','orden_compra_pendiente','cerrado','facturado','desestimado'],
-    []
-  )
-
-  const verArchivo = async (row: Cotizacion) => {
-    if (!row.archivo_path) return toast.info('No hay archivo')
-    const { data, error } = await supabase.storage.from('cotizaciones').createSignedUrl(row.archivo_path, 3600)
-    if (error || !data?.signedUrl) return toast.error('No se pudo obtener el archivo')
-    window.open(data.signedUrl, '_blank')
-  }
-
-  const actualizarEstado = async (row: Cotizacion, nuevo: Estado) => {
-    const prev = listado.slice()
-    setListado((xs) => xs.map((r) => (r.id === row.id ? { ...r, estado: nuevo } : r)))
-
-    const { error } = await supabase.from('cotizaciones').update({ estado: nuevo }).eq('id', row.id)
-    if (error) {
-      toast.error('No se pudo actualizar el estado: ' + error.message)
-      setListado(prev) // rollback
-    } else {
-      toast.success('Estado actualizado')
-    }
-  }
-
-  const ingresarOC = async (row: Cotizacion) => {
-    const numero = window.prompt('Poner número de orden de compra')?.trim()
-    if (!numero) { toast.info('Número no ingresado'); return }
-    const { error } = await supabase.from('cotizaciones')
-      .update({ orden_compra_numero: numero })
-      .eq('id', row.id)
-    if (error) {
-      toast.error('No se pudo guardar la orden de compra: ' + error.message)
-      return
-    }
-    toast.success('Orden de compra registrada')
-    setListado(ls => ls.map(c => c.id === row.id ? { ...c, orden_compra_numero: numero } : c))
-  }
-
-  const onKeyDownBuscar = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') cargarListado()
-  }
-
-  const formatARS = (v: number | null | undefined) =>
-    v == null ? '—' : `$ ${new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v)}`
 
   return (
     <div style={styles.wrap}>
-      {/* Header con botón Volver */}
       <div style={styles.headerRow}>
-        <button onClick={() => navigate('/fm')} style={styles.btnBack}>
+        <button onClick={() => navigate('/superadmin')} style={styles.btnBack}>
           ← Volver
         </button>
-        <h2 style={styles.title}>Cotizaciones (FM)</h2>
+        <h2 style={styles.title}>Crear Cotización (Superadmin)</h2>
       </div>
 
-      {/* Form de alta */}
       <form onSubmit={subirCotizacion} style={styles.form}>
         <div style={styles.row}>
           <label style={styles.label}>Número *</label>
@@ -339,99 +228,13 @@ export default function CotizacionesFM() {
           </button>
         </div>
       </form>
-
-      {/* Filtros */}
-      <div style={styles.filters}>
-        <input
-          placeholder="Buscar por N° o UUID…"
-          value={qId}
-          onChange={(e) => setQId(e.target.value)}
-          onKeyDown={onKeyDownBuscar}
-          style={styles.input}
-        />
-        <input
-          placeholder="Buscar por cliente…"
-          value={qCliente}
-          onChange={(e) => setQCliente(e.target.value)}
-          onKeyDown={onKeyDownBuscar}
-          style={styles.input}
-        />
-        <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} style={styles.input} />
-        <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} style={styles.input} />
-        <button onClick={cargarListado} disabled={cargando} style={styles.btn}>
-          {cargando ? 'Cargando…' : 'Aplicar filtros'}
-        </button>
-      </div>
-
-      {/* Tabla */}
-      <div style={{ overflow: 'auto' }}>
-        <table style={styles.table}>
-          <thead>
-            <tr>
-              <th>N°</th>
-              <th>Cliente</th>
-              <th>Descripción</th>
-              <th>Monto</th>
-              <th>Fecha</th>
-              <th>Estado</th>
-              <th>Orden Compra</th>
-              <th>Archivo</th>
-            </tr>
-          </thead>
-          <tbody>
-            {listado.map((row) => (
-              <tr key={row.id}>
-                <td>#{String(row.numero).padStart(6, '0')}</td>
-                <td>{row.cliente}</td>
-                <td>{row.descripcion ?? '-'}</td>
-                <td>{formatARS(row.monto)}</td>
-                <td>{row.fecha ?? '-'}</td>
-                <td>
-                  <select value={row.estado} onChange={(e) => actualizarEstado(row, e.target.value as Estado)} style={styles.input}>
-                    {estados.map((es) => (
-                      <option key={es} value={es}>
-                        {es}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td>
-                  {row.orden_compra_numero ? (
-                    <span style={{ fontWeight: 600 }}>{row.orden_compra_numero}</span>
-                  ) : (
-                    <button style={styles.linkBtn} onClick={() => ingresarOC(row)}>Agregar orden de compra</button>
-                  )}
-                </td>
-                <td>
-                  <button style={styles.linkBtn} onClick={() => verArchivo(row)} disabled={!row.archivo_path}>
-                    {row.archivo_path ? 'Ver/Descargar' : 'Sin archivo'}
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {!listado.length && (
-              <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: 16, color: '#64748b' }}>
-                  No hay cotizaciones
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
     </div>
   )
 }
 
 const styles: { [k: string]: React.CSSProperties } = {
   wrap: { maxWidth: 1000, margin: '0 auto', padding: 20, fontFamily: `'Segoe UI', sans-serif` },
-
-  headerRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 12,
-  },
+  headerRow: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 },
   btnBack: {
     backgroundColor: '#6b7280',
     color: '#fff',
@@ -443,7 +246,6 @@ const styles: { [k: string]: React.CSSProperties } = {
     cursor: 'pointer',
   },
   title: { margin: 0, color: '#0f172a' },
-
   form: { border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, marginBottom: 16, background: '#fff' },
   row: { display: 'grid', gridTemplateColumns: '160px 1fr', alignItems: 'center', gap: 12, marginBottom: 10 },
   row3: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 10 },
@@ -452,10 +254,6 @@ const styles: { [k: string]: React.CSSProperties } = {
   input: { border: '1px solid #cbd5e1', borderRadius: 10, padding: '10px 12px', fontSize: 14, outline: 'none', background: '#fff' },
   btnPrimary: { background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', fontWeight: 600 },
   btnGhost: { background: '#fff', color: '#0f172a', border: '1px solid #cbd5e1', borderRadius: 10, padding: '10px 14px', cursor: 'pointer', fontWeight: 600 },
-  filters: { display: 'grid', gridTemplateColumns: '1fr 1fr 160px 160px 160px', gap: 8, margin: '8px 0 16px' },
-  btn: { background: '#e2e8f0', border: '1px solid #cbd5e1', borderRadius: 10, padding: '10px 12px', cursor: 'pointer', fontWeight: 600 },
-  table: { width: '100%', borderCollapse: 'separate', borderSpacing: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12 },
-  linkBtn: { background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontWeight: 600 },
   suggestBox: {
     position: 'absolute',
     top: '100%',

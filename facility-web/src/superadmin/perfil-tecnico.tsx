@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useToast } from '../components/ToastProvider'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
 
@@ -13,6 +14,7 @@ type Tecnico = {
   apellido: string
   empresa?: string | null
   avatar_url: string
+  horario_llegada?: string | null
 }
 
 type Tarea = {
@@ -44,10 +46,15 @@ const TIPO_LABEL: Record<'gestion' | 'gastos', string> = {
 export default function PerfilTecnicoSA() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const toast = useToast()
   const [tecnico, setTecnico] = useState<Tecnico | null>(null)
   const [tareas, setTareas] = useState<Tarea[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Inventario asignado al técnico
+  const [itemsAsignados, setItemsAsignados] = useState<Array<{ id: string; tipo: string; descripcion: string; cantidad: number }>>([])
+  const [devolviendoId, setDevolviendoId] = useState<string | null>(null)
 
   // ---- Planillas (solo lectura para SA) ----
   const [busyPlanillas, setBusyPlanillas] = useState(false)
@@ -56,6 +63,9 @@ export default function PerfilTecnicoSA() {
     gestion: null,
     gastos: null,
   })
+
+  // UI: toasts y estado de subida de documentos
+  const [subiendoDoc, setSubiendoDoc] = useState<null | 'poliza' | 'acta'>(null)
 
   useEffect(() => {
     if (id) {
@@ -80,7 +90,7 @@ export default function PerfilTecnicoSA() {
     try {
       const { data: usuario, error: errorUsuario } = await supabase
         .from('usuarios')
-        .select('id, nombre, apellido')
+        .select('id, nombre, apellido, horario_llegada')
         .eq('id', id)
         .single()
 
@@ -113,6 +123,7 @@ export default function PerfilTecnicoSA() {
         apellido: usuario.apellido,
         empresa: null,
         avatar_url,
+        horario_llegada: usuario.horario_llegada || null,
       })
 
       const { data: tareasProximas } = await supabase
@@ -127,11 +138,77 @@ export default function PerfilTecnicoSA() {
       // Si en el futuro querés mostrar algo de documentos_tecnicos:
       await supabase.from('documentos_tecnicos').select('*').eq('tecnico_id', id).maybeSingle()
 
+      // Inventario asignado (estado 'entregado')
+      const { data: asignado, error: invErr } = await supabase
+        .from('inventario')
+        .select('id, tipo, descripcion, cantidad')
+        .eq('usuario_id', id)
+        .eq('estado', 'entregado')
+        .order('tipo', { ascending: true })
+      if (invErr) throw invErr
+      setItemsAsignados((asignado as any[])?.map((r) => ({ id: r.id, tipo: r.tipo, descripcion: r.descripcion, cantidad: r.cantidad ?? 0 })) || [])
+
       setLoading(false)
     } catch (err) {
       console.error('Error en fetchDatos:', err)
       setError('Error al cargar los datos')
       setLoading(false)
+    }
+  }
+  async function devolverAlStock(item: { id: string; tipo: string; descripcion: string; cantidad: number }) {
+    if (!id) return
+    if (item.cantidad <= 0) return
+    const cant = 1 // por ahora devolvemos de a 1; se puede ampliar a selector
+    try {
+      setDevolviendoId(item.id)
+      // 1) Descontar o eliminar la fila del técnico (estado entregado)
+      const nuevaCantTec = item.cantidad - cant
+      if (nuevaCantTec > 0) {
+        const { error: upTecErr } = await supabase
+          .from('inventario')
+          .update({ cantidad: nuevaCantTec })
+          .eq('id', item.id)
+        if (upTecErr) throw upTecErr
+      } else {
+        const { error: delTecErr } = await supabase
+          .from('inventario')
+          .delete()
+          .eq('id', item.id)
+        if (delTecErr) throw delTecErr
+      }
+
+      // 2) Merge al stock (usuario_id null, estado stock, mismo tipo+descripcion)
+      const { data: stockRow, error: findErr } = await supabase
+        .from('inventario')
+        .select('id, cantidad')
+        .is('usuario_id', null)
+        .eq('estado', 'stock')
+        .eq('tipo', item.tipo)
+        .eq('descripcion', item.descripcion)
+        .maybeSingle()
+      if (findErr) throw findErr
+
+      if (stockRow?.id) {
+        const { error: upStockErr } = await supabase
+          .from('inventario')
+          .update({ cantidad: (stockRow.cantidad ?? 0) + cant })
+          .eq('id', stockRow.id)
+        if (upStockErr) throw upStockErr
+      } else {
+        const { error: insStockErr } = await supabase
+          .from('inventario')
+          .insert({ usuario_id: null, tipo: item.tipo, descripcion: item.descripcion, cantidad: cant, estado: 'stock' })
+        if (insStockErr) throw insStockErr
+      }
+
+      // Refresh asignados
+      await fetchDatos()
+      alert('Devolución realizada al stock')
+    } catch (e: any) {
+      console.error(e)
+      alert(e?.message || 'No se pudo devolver al stock')
+    } finally {
+      setDevolviendoId(null)
     }
   }
 
@@ -259,7 +336,7 @@ export default function PerfilTecnicoSA() {
         window.open(urlData.publicUrl, '_blank')
       }
     } catch (error) {
-      alert('Error al descargar el archivo')
+  toast.error('Error al descargar el archivo')
     }
   }
 
@@ -271,12 +348,13 @@ export default function PerfilTecnicoSA() {
     const path = `${id}/${tipo}.pdf`
     const { error: errorRemove } = await supabase.storage.from(bucket).remove([path])
     if (errorRemove) {
-      alert('Error eliminando el archivo')
+      toast.error('Error eliminando el archivo')
       return
     }
     const campo = tipo === 'poliza' ? 'poliza_url' : 'acta_compromiso_url'
     await supabase.from('documentos_tecnicos').update({ [campo]: null }).eq('tecnico_id', id)
     fetchDatos()
+  toast.success('Archivo eliminado')
   }
 
   const subir = async (tipo: 'poliza' | 'acta') => {
@@ -284,41 +362,57 @@ export default function PerfilTecnicoSA() {
     input.type = 'file'
     input.accept = 'application/pdf'
     input.onchange = async (e: any) => {
-      const file = e.target.files[0]
+      const file: File | undefined = e.target.files?.[0]
       if (!file || !id) return
       try {
-        const reader = new FileReader()
-        reader.onload = async (event) => {
-          const result = event.target?.result
-          if (!(result instanceof ArrayBuffer)) {
-            alert('Error al procesar el archivo')
-            return
-          }
-          const bucket = tipo === 'poliza' ? 'polizas' : 'actacompromiso'
-          const path = `${id}/${tipo}.pdf`
-          const { error: uploadError } = await supabase.storage
-            .from(bucket)
-            .upload(path, result, { contentType: 'application/pdf', upsert: true })
-          if (uploadError) {
-            alert(`Error subiendo archivo: ${uploadError.message}`)
-            return
-          }
-          const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path)
-          const campo = tipo === 'poliza' ? 'poliza_url' : 'acta_compromiso_url'
-          const { error: upsertError } = await supabase.from('documentos_tecnicos').upsert([
-            { tecnico_id: id, [campo]: pub?.publicUrl },
-          ])
-          if (upsertError) {
-            alert('Error al guardar la URL del archivo')
-            return
-          }
-          alert('Archivo subido exitosamente')
-          fetchDatos()
+        setSubiendoDoc(tipo)
+        const bucket = tipo === 'poliza' ? 'polizas' : 'actacompromiso'
+        const path = `${id}/${tipo}.pdf`
+        const { error: uploadError } = await supabase.storage
+          .from(bucket)
+          .upload(path, file, {
+            contentType: file.type || 'application/pdf',
+            upsert: true,
+          })
+        if (uploadError) {
+          console.error('Upload error:', uploadError)
+          toast.error(`Error subiendo archivo: ${uploadError.message}`)
+          return
         }
-        reader.onerror = () => alert('Error al leer el archivo')
-        reader.readAsArrayBuffer(file)
-      } catch {
-        alert('Error inesperado al subir archivo')
+
+        // Obtener URL pública (asumiendo bucket público). Si es privado, migrar a signed URL persistente en DB.
+        const { data: pub } = supabase.storage.from(bucket).getPublicUrl(path)
+        const campo = tipo === 'poliza' ? 'poliza_url' : 'acta_compromiso_url'
+        // Update-or-insert para no depender de UNIQUE(tecnico_id)
+        const { data: updData, error: updErr } = await supabase
+          .from('documentos_tecnicos')
+          .update({ [campo]: pub?.publicUrl })
+          .eq('tecnico_id', id)
+          .select('tecnico_id')
+
+        if (updErr) {
+          console.error('DB update error:', updErr)
+          toast.error('Error al guardar la URL del archivo')
+          return
+        }
+
+        if (!updData || updData.length === 0) {
+          const { error: insErr } = await supabase
+            .from('documentos_tecnicos')
+            .insert([{ tecnico_id: id, [campo]: pub?.publicUrl }])
+          if (insErr) {
+            console.error('DB insert error:', insErr)
+            toast.error('Error al guardar la URL del archivo')
+            return
+          }
+        }
+        toast.success('Archivo subido exitosamente')
+        fetchDatos()
+      } catch (err: any) {
+        console.error('Unexpected upload error:', err)
+        toast.error('Error inesperado al subir archivo')
+      } finally {
+        setSubiendoDoc(null)
       }
     }
     input.click()
@@ -326,6 +420,7 @@ export default function PerfilTecnicoSA() {
 
   return (
     <div style={styles.container}>
+      {/* Toasts globales montados en App via ToastProvider */}
       <div style={styles.headerContainer}>
         <button onClick={() => navigate('/superadmin/tecnicos')} style={styles.botonVolver}>
           ← Volver
@@ -351,6 +446,61 @@ export default function PerfilTecnicoSA() {
             {tecnico.nombre} {tecnico.apellido}
           </h2>
           <p>Empresa asignada: {tecnico.empresa || 'Sin asignar'}</p>
+
+          {/* ---------- Horario de llegada ---------- */}
+          <div style={styles.horarioCard}>
+            <h3>Horario de llegada</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <input
+                type="time"
+                value={tecnico.horario_llegada || ''}
+                onChange={async (e) => {
+                  const val = e.target.value || null
+                  setTecnico(t => t ? { ...t, horario_llegada: val } : t)
+                }}
+                style={styles.monthInput}
+              />
+              <button
+                style={planillasUI.secondaryBtn}
+                onClick={async () => {
+                  if (!tecnico?.id) return
+                  try {
+                    const { error } = await supabase
+                      .from('usuarios')
+                      .update({ horario_llegada: tecnico.horario_llegada || null })
+                      .eq('id', tecnico.id)
+                    if (error) throw error
+                    toast.success('Horario de llegada actualizado')
+                  } catch (e: any) {
+                    toast.error(e.message || 'No se pudo guardar el horario')
+                  }
+                }}
+              >
+                Guardar horario
+              </button>
+              {tecnico.horario_llegada && (
+                <button
+                  style={planillasUI.secondaryBtn}
+                  onClick={async () => {
+                    if (!tecnico?.id) return
+                    try {
+                      const { error } = await supabase
+                        .from('usuarios')
+                        .update({ horario_llegada: null })
+                        .eq('id', tecnico.id)
+                      if (error) throw error
+                      setTecnico(t => t ? { ...t, horario_llegada: null } : t)
+                      toast.info('Horario eliminado')
+                    } catch (e: any) {
+                      toast.error(e.message || 'No se pudo eliminar el horario')
+                    }
+                  }}
+                >
+                  Quitar horario
+                </button>
+              )}
+            </div>
+          </div>
 
           {/* ---------- Planillas del técnico (solo lectura para SA) ---------- */}
           <div style={planillasUI.wrapper}>
@@ -412,12 +562,46 @@ export default function PerfilTecnicoSA() {
             ))
           )}
 
+          {/* ---------- Inventario asignado al técnico ---------- */}
+          <h3>Inventario asignado</h3>
+          {itemsAsignados.length === 0 ? (
+            <p>Sin elementos asignados</p>
+          ) : (
+            <div style={invUI.table}>
+              <div style={invUI.thead}>
+                <div>Tipo</div>
+                <div>Descripción</div>
+                <div style={{ textAlign: 'right' }}>Cantidad</div>
+                <div style={{ textAlign: 'right' }}>Acciones</div>
+              </div>
+              <div>
+                {itemsAsignados.map((it) => (
+                  <div key={it.id} style={invUI.tr}>
+                    <div>{it.tipo}</div>
+                    <div>{it.descripcion}</div>
+                    <div style={{ textAlign: 'right' }}>{it.cantidad}</div>
+                    <div style={{ textAlign: 'right' }}>
+                      <button
+                        onClick={() => devolverAlStock(it)}
+                        disabled={devolviendoId === it.id || it.cantidad <= 0}
+                        style={invUI.btnReturn}
+                      >
+                        {devolviendoId === it.id ? 'Devolviendo…' : 'Devolver al stock'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* ---------- Documentos (póliza/acta) ---------- */}
           <h3>Documentos</h3>
           <div style={styles.buttonContainer}>
             <button
               style={styles.uploadButton}
               onClick={() => subir('poliza')}
+              disabled={subiendoDoc === 'poliza' || subiendoDoc === 'acta'}
               onMouseOver={(e) => {
                 e.currentTarget.style.backgroundColor = '#1d4ed8'
                 e.currentTarget.style.transform = 'translateY(-1px)'
@@ -429,11 +613,12 @@ export default function PerfilTecnicoSA() {
                 e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)'
               }}
             >
-              📄 Subir póliza
+              {subiendoDoc === 'poliza' ? '⏳ Subiendo póliza…' : '📄 Subir póliza'}
             </button>
             <button
               style={styles.uploadButton}
               onClick={() => subir('acta')}
+              disabled={subiendoDoc === 'poliza' || subiendoDoc === 'acta'}
               onMouseOver={(e) => {
                 e.currentTarget.style.backgroundColor = '#1d4ed8'
                 e.currentTarget.style.transform = 'translateY(-1px)'
@@ -445,7 +630,7 @@ export default function PerfilTecnicoSA() {
                 e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)'
               }}
             >
-              📄 Subir acta
+              {subiendoDoc === 'acta' ? '⏳ Subiendo acta…' : '📄 Subir acta'}
             </button>
             <button
               style={styles.downloadButton}
@@ -574,6 +759,13 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: 8,
     marginBottom: 10,
   },
+  horarioCard: {
+    backgroundColor: '#ffffff',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    border: '2px solid #e2e8f0',
+  },
   buttonContainer: {
     display: 'flex',
     flexDirection: 'column',
@@ -651,4 +843,11 @@ const planillasUI: Record<string, React.CSSProperties> = {
   },
   disabledBtn: { opacity: 0.5, cursor: 'not-allowed' },
   meta: { marginTop: 8, fontSize: 12, color: '#475569' },
+}
+
+const invUI: Record<string, React.CSSProperties> = {
+  table: { border: '1px solid #e2e8f0', borderRadius: 10, overflow: 'hidden', marginTop: 8 },
+  thead: { display: 'grid', gridTemplateColumns: '140px 1fr 120px 160px', gap: 8, padding: 10, background: '#f1f5f9', fontWeight: 700, color: '#0f172a' },
+  tr: { display: 'grid', gridTemplateColumns: '140px 1fr 120px 160px', gap: 8, padding: 10, borderTop: '1px solid #e5e7eb', alignItems: 'center' },
+  btnReturn: { background: '#6b7280', color: '#fff', border: 'none', padding: '8px 10px', borderRadius: 8, cursor: 'pointer' },
 }

@@ -18,37 +18,23 @@ export default function Login() {
       return
     }
 
-    // Log para depuración
-    console.log('Usuario autenticado:', data.user)
-
     const { data: perfil, error: perfilError } = await supabase
       .from('usuarios')
       .select('rol')
       .eq('id', data.user.id)
       .single()
 
-    // Log para depuración
-    console.log('Perfil obtenido:', perfil)
-    if (perfilError) {
-      alert('Error obteniendo perfil: ' + perfilError.message)
-      return
-    }
-    if (!perfil) {
-      alert('No se encontró el perfil de usuario en la tabla usuarios.')
+    if (perfilError || !perfil) {
+      alert('Error obteniendo perfil')
       return
     }
 
-    const rol = perfil.rol
-
-    if (rol === 'superadmin') navigate('/superadmin')
-    else if (rol === 'fm') navigate('/fm')
-    else if (rol === 'mantenimiento') navigate('/mantenimiento')
-    else if (rol === 'limpieza') navigate('/limpieza')
-    else if (rol === 'mantenimiento-externo') navigate('/mantenimiento-externo')
-    else {
-      alert('Rol no reconocido: ' + rol)
-      navigate('/login')
-    }
+  const rol = perfil.rol
+  if (rol === 'superadmin') navigate('/superadmin')
+  else if (rol === 'fm') navigate('/fm')
+  else if (rol === 'mantenimiento' || rol === 'mantenimiento-externo') navigate('/mantenimiento')
+  else if (rol === 'limpieza') navigate('/limpieza')
+  else navigate('/login')
   }
 
   return (
@@ -72,21 +58,20 @@ export default function Login() {
         style={styles.input}
       />
       <button onClick={iniciarSesion} style={styles.button}>Entrar</button>
+
+      <p
+        onClick={() => navigate('/recuperar')}
+        style={styles.link}
+      >
+        ¿Olvidaste tu contraseña?
+      </p>
     </div>
   )
 }
 
 const styles = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    marginTop: '120px',
-  },
-  logo: {
-    width: '180px',
-    marginBottom: '40px',
-  },
+  container: { display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '120px' },
+  logo: { width: '180px', marginBottom: '40px' },
   input: {
     padding: '12px',
     marginBottom: '12px',
@@ -102,5 +87,11 @@ const styles = {
     border: 'none',
     borderRadius: '8px',
     cursor: 'pointer',
+  },
+  link: {
+    marginTop: '16px',
+    color: '#2563EB',
+    cursor: 'pointer',
+    fontWeight: 'bold',
   },
 } as const

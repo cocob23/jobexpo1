@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { useToast } from '../components/ToastProvider'
 
-type Estado = 'cotizado' | 'aprobado' | 'cerrado' | 'facturado' | 'desestimado'
+type Estado = 'pendiente' | 'cotizado' | 'aprobado' | 'orden_compra_pendiente' | 'cerrado' | 'facturado' | 'desestimado'
 
 type Usuario = {
   id: string
@@ -24,10 +25,13 @@ type Cotizacion = {
   creado_en: string
   subida_por: string
   usuarios?: Usuario | null
+  orden_compra_numero?: string | null
+  numero_factura?: string | null
 }
 
 export default function CotizacionesSuperadmin() {
   const navigate = useNavigate()
+  const toast = useToast()
 
   const [cargando, setCargando] = useState(false)
   const [listado, setListado] = useState<Cotizacion[]>([])
@@ -42,8 +46,10 @@ export default function CotizacionesSuperadmin() {
 
   const [fms, setFms] = useState<Usuario[]>([])
 
+  // alta: se movió a página dedicada '/superadmin/cotizaciones/crear'
+
   const estados: Estado[] = useMemo(
-    () => ['cotizado', 'aprobado', 'cerrado', 'facturado', 'desestimado'],
+    () => ['pendiente','cotizado','aprobado','orden_compra_pendiente','cerrado','facturado','desestimado'],
     []
   )
 
@@ -56,8 +62,10 @@ export default function CotizacionesSuperadmin() {
   }
 
   useEffect(() => {
-    cargarFMs()
-    cargarListado()
+    (async () => {
+      cargarFMs()
+      cargarListado()
+    })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -65,7 +73,7 @@ export default function CotizacionesSuperadmin() {
     const { data } = await supabase
       .from('usuarios')
       .select('id, nombre, apellido, email')
-      .eq('rol', 'fm')
+      .in('rol', ['fm','superadmin'])
       .order('apellido', { ascending: true })
     setFms(data || [])
   }
@@ -78,6 +86,7 @@ export default function CotizacionesSuperadmin() {
       .select(`
         id, numero, cliente, descripcion, monto, fecha, estado,
         archivo_path, archivo_mimetype, creado_en, subida_por,
+        orden_compra_numero, numero_factura,
         usuarios:subida_por ( id, nombre, apellido, email )
       `)
       .order('numero', { ascending: false })
@@ -103,22 +112,75 @@ export default function CotizacionesSuperadmin() {
   }
 
   const verArchivo = async (row: Cotizacion) => {
-    if (!row.archivo_path) return alert('No hay archivo')
+    if (!row.archivo_path) return toast.info('No hay archivo')
     const { data, error } = await supabase.storage.from('cotizaciones').createSignedUrl(row.archivo_path, 3600)
-    if (error || !data?.signedUrl) return alert('No se pudo obtener el archivo')
+    if (error || !data?.signedUrl) return toast.error('No se pudo obtener el archivo')
     window.open(data.signedUrl, '_blank')
+  }
+
+  const borrarCotizacion = async (row: Cotizacion) => {
+    const ok = window.confirm(`¿Eliminar la cotización #${String(row.numero).padStart(6, '0')}? Esta acción no se puede deshacer.`)
+    if (!ok) return
+    try {
+      // 1) borrar archivo de storage si existe
+      if (row.archivo_path) {
+        const { error: remErr } = await supabase.storage.from('cotizaciones').remove([row.archivo_path])
+        if (remErr) {
+          // no bloquea el proceso, solo informa
+          toast.info('No se pudo borrar el archivo adjunto, se intentará borrar el registro igualmente')
+        }
+      }
+
+      // 2) borrar registro
+      const { error } = await supabase.from('cotizaciones').delete().eq('id', row.id)
+      if (error) throw error
+      setListado(xs => xs.filter(x => x.id !== row.id))
+      toast.success('Cotización eliminada')
+    } catch (e: any) {
+      toast.error(e?.message || 'No se pudo eliminar la cotización')
+    }
   }
 
   const actualizarEstado = async (id: string, nuevo: Estado) => {
     const prev = listado.slice()
-    setListado((x) => x.map((r) => (r.id === id ? { ...r, estado: nuevo } : r)))
+    let payload: any = { estado: nuevo }
 
-    const { error } = await supabase.from('cotizaciones').update({ estado: nuevo }).eq('id', id)
+    // Si pasa a 'facturado', pedir número de factura
+    if (nuevo === 'facturado') {
+      const nro = window.prompt('Ingrese número de factura')?.trim()
+      if (!nro) {
+        toast.info('No se ingresó número de factura')
+        return
+      }
+      payload.numero_factura = nro
+    }
+
+    setListado((x) => x.map((r) => (r.id === id ? { ...r, ...payload } : r)))
+
+    const { error } = await supabase.from('cotizaciones').update(payload).eq('id', id)
     if (error) {
-      alert('No se pudo actualizar el estado: ' + error.message)
+      toast.error('No se pudo actualizar el estado: ' + error.message)
       setListado(prev)
+    } else {
+      toast.success('Estado actualizado')
     }
   }
+
+  const ingresarOC = async (row: Cotizacion) => {
+    const numero = window.prompt('Poner número de orden de compra')?.trim()
+    if (!numero) { toast.info('Número no ingresado'); return }
+    // Mantener estado 'aprobado' y solo guardar numero de OC
+    const { error } = await supabase.from('cotizaciones')
+      .update({ orden_compra_numero: numero })
+      .eq('id', row.id)
+    if (error) {
+      toast.error('No se pudo guardar la orden de compra: ' + error.message)
+      return
+    }
+    toast.success('Orden de compra registrada')
+    setListado(ls => ls.map(c => c.id === row.id ? { ...c, orden_compra_numero: numero } : c))
+  }
+
 
   const nombreFM = (u?: Usuario | null) =>
     u ? `${u.apellido ?? ''} ${u.nombre ?? ''}`.trim() || u.email || '—' : '—'
@@ -127,6 +189,9 @@ export default function CotizacionesSuperadmin() {
     if (e.key === 'Enter') cargarListado()
   }
 
+  const formatARS = (v: number | null | undefined) =>
+    v == null ? '—' : `$ ${new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v)}`
+
   return (
     <div style={styles.wrap}>
       {/* Botón volver y título */}
@@ -134,7 +199,7 @@ export default function CotizacionesSuperadmin() {
         <button onClick={() => navigate('/superadmin')} style={styles.btnBack}>
           ← Volver
         </button>
-        <h2 style={styles.title}>Gestionar Cotizaciones (Superadmin)</h2>
+        <h2 style={styles.title}>Ver Cotizaciones (Superadmin)</h2>
       </div>
 
       {/* Filtros */}
@@ -188,11 +253,14 @@ export default function CotizacionesSuperadmin() {
               <th style={styles.th}>N°</th>
               <th style={styles.th}>Cliente</th>
               <th style={styles.th}>Descripción</th>
-              <th style={styles.th}>Monto</th>
+              <th style={styles.montoTh}>Monto</th>
               <th style={styles.th}>Fecha</th>
               <th style={styles.th}>Estado</th>
+              <th style={styles.th}>Orden Compra</th>
+              <th style={styles.th}>N° Factura</th>
               <th style={styles.th}>Subida por</th>
               <th style={styles.th}>Archivo</th>
+              <th style={styles.th}>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -201,7 +269,7 @@ export default function CotizacionesSuperadmin() {
                 <td style={styles.td}>#{String(r.numero).padStart(6, '0')}</td>
                 <td style={styles.td}>{r.cliente}</td>
                 <td style={styles.td}>{r.descripcion ?? '—'}</td>
-                <td style={styles.td}>{r.monto ?? '—'}</td>
+                <td style={styles.montoTd}>{formatARS(r.monto)}</td>
                 <td style={styles.td}>{r.fecha ?? '—'}</td>
                 <td style={styles.td}>
                   <select value={r.estado} onChange={(e) => actualizarEstado(r.id, e.target.value as Estado)} style={styles.inputSm}>
@@ -212,17 +280,33 @@ export default function CotizacionesSuperadmin() {
                     ))}
                   </select>
                 </td>
+                <td style={styles.td}>
+                  {r.orden_compra_numero ? (
+                    <span style={{ fontWeight: 600 }}>{r.orden_compra_numero}</span>
+                  ) : (
+                    <button style={styles.linkBtn} onClick={() => ingresarOC(r)}>Agregar orden de compra</button>
+                  )}
+                </td>
+                <td style={styles.td}>{(r as any).numero_factura || '—'}</td>
                 <td style={styles.td}>{nombreFM(r.usuarios)}</td>
                 <td style={styles.td}>
                   <button style={styles.linkBtn} onClick={() => verArchivo(r)} disabled={!r.archivo_path}>
                     {r.archivo_path ? 'Ver/Descargar' : 'Sin archivo'}
                   </button>
                 </td>
+                <td style={styles.td}>
+                  <button
+                    style={{ ...styles.linkBtn, background: '#fee2e2', borderColor: '#fecaca', color: '#991b1b' }}
+                    onClick={() => borrarCotizacion(r)}
+                  >
+                    Borrar
+                  </button>
+                </td>
               </tr>
             ))}
             {!listado.length && (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: 16, color: '#64748b' }}>
+                <td colSpan={11} style={{ textAlign: 'center', padding: 16, color: '#64748b' }}>
                   No hay resultados
                 </td>
               </tr>
@@ -235,7 +319,7 @@ export default function CotizacionesSuperadmin() {
 }
 
 const styles: { [k: string]: React.CSSProperties } = {
-  wrap: { maxWidth: 1100, margin: '0 auto', padding: 20, fontFamily: `'Segoe UI', sans-serif` },
+  wrap: { maxWidth: 1280, margin: '0 auto', padding: 20, fontFamily: `'Segoe UI', sans-serif` },
   headerRow: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 },
   btnBack: {
     backgroundColor: '#6b7280',
@@ -250,8 +334,8 @@ const styles: { [k: string]: React.CSSProperties } = {
   title: { margin: 0, color: '#0f172a', fontSize: '1.4rem', fontWeight: 700 },
   filtros: {
     display: 'grid',
-    gridTemplateColumns: '1fr 240px 1fr 200px 160px 160px 160px',
-    gap: 8,
+    gridTemplateColumns: '1fr 280px 1.2fr 220px 180px 180px 180px',
+    gap: 10,
     marginBottom: 12,
   },
   input: { border: '1px solid #cbd5e1', borderRadius: 10, padding: '10px 12px', fontSize: 14, outline: 'none', background: '#fff' },
@@ -259,6 +343,8 @@ const styles: { [k: string]: React.CSSProperties } = {
   btn: { background: '#e2e8f0', border: '1px solid #cbd5e1', borderRadius: 10, padding: '10px 12px', cursor: 'pointer', fontWeight: 600 },
   table: { width: '100%', borderCollapse: 'separate', borderSpacing: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12 },
   th: { textAlign: 'left', padding: '10px 12px', color: '#475569', background: '#f8fafc' },
+  montoTh: { textAlign: 'left', padding: '10px 12px', color: '#475569', background: '#f8fafc', width: 140 },
   td: { padding: '10px 12px', borderTop: '1px solid #e2e8f0' },
+  montoTd: { padding: '10px 12px', borderTop: '1px solid #e2e8f0', whiteSpace: 'nowrap', width: 140 },
   linkBtn: { background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 8, padding: '6px 10px', cursor: 'pointer', fontWeight: 600 },
 }

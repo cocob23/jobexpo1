@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import './responsive.css'
 
 type Llegada = {
   id: string
@@ -10,9 +11,15 @@ type Llegada = {
   hora: string | null
   latitud: number | null
   longitud: number | null
+  // salida
+  salida_fecha?: string | null
+  salida_hora?: string | null
+  salida_latitud?: number | null
+  salida_longitud?: number | null
   usuarios: {
     nombre: string
     apellido: string
+    horario_llegada?: string | null
   } | null
 }
 
@@ -27,6 +34,7 @@ export default function Llegadas() {
   const [busqueda, setBusqueda] = useState<string>('')
   const [fecha, setFecha] = useState<string>('')        // '' = sin filtro
   const [lugar, setLugar] = useState<string>('')
+  const [soloTardes, setSoloTardes] = useState<boolean>(false)
 
   useEffect(() => {
     obtenerLlegadas()
@@ -44,7 +52,8 @@ export default function Llegadas() {
           *,
           usuarios:usuario_id (
             nombre,
-            apellido
+            apellido,
+            horario_llegada
           )
         `)
 
@@ -74,16 +83,45 @@ export default function Llegadas() {
   const mapEmbedUrl = (lat: number, lng: number, zoom = 15) =>
     `https://maps.google.com/maps?q=${lat},${lng}&z=${zoom}&output=embed`
 
+  const esTarde = (hLlegada?: string | null, hHorario?: string | null) => {
+    if (!hLlegada || !hHorario) return false
+    // formatos esperados: 'HH:MM' (24h)
+    const [hlH, hlM] = hLlegada.split(':').map(Number)
+    const [hhH, hhM] = hHorario.split(':').map(Number)
+    if ([hlH, hlM, hhH, hhM].some((v) => Number.isNaN(v))) return false
+    const llegadaMin = hlH * 60 + hlM
+    const horarioMin = hhH * 60 + hhM
+    return llegadaMin > (horarioMin + 10) // más de 10 min tarde
+  }
+
+  const calcularDuracionMin = (l: Llegada): number | null => {
+    if (!l.fecha || !l.hora || !l.salida_fecha || !l.salida_hora) return null
+    try {
+      const inDate = new Date(`${String(l.fecha).split('T')[0]}T${l.hora}`)
+      const outDate = new Date(`${String(l.salida_fecha).split('T')[0]}T${l.salida_hora}`)
+      const diffMs = outDate.getTime() - inDate.getTime()
+      if (!Number.isFinite(diffMs)) return null
+      const mins = Math.round(diffMs / 60000)
+      return mins < 0 ? null : mins
+    } catch {
+      return null
+    }
+  }
+
   // filtro por nombre/apellido (client‑side)
   const llegadasFiltradas = useMemo(() => {
     const q = busqueda.trim().toLowerCase()
-    if (!q) return llegadas
-    return llegadas.filter(l => {
+    let base = llegadas
+    if (soloTardes) {
+      base = base.filter(l => esTarde(l.hora, l.usuarios?.horario_llegada ?? null))
+    }
+    if (!q) return base
+    return base.filter(l => {
       const nombre = l.usuarios?.nombre?.toLowerCase() || ''
       const apellido = l.usuarios?.apellido?.toLowerCase() || ''
       return nombre.includes(q) || apellido.includes(q) || `${nombre} ${apellido}`.includes(q)
     })
-  }, [llegadas, busqueda])
+  }, [llegadas, busqueda, soloTardes])
 
   return (
     <div style={styles.wrapper}>
@@ -141,6 +179,19 @@ export default function Llegadas() {
             />
           </div>
 
+          <div style={styles.filterGroup}>
+            <label style={styles.label}>Tardanza</label>
+            <div style={styles.dateRow}>
+              <input
+                id="solo-tardes"
+                type="checkbox"
+                checked={soloTardes}
+                onChange={(e) => setSoloTardes(e.target.checked)}
+              />
+              <label htmlFor="solo-tardes" style={{ fontSize: 13 }}>Solo tardes</label>
+            </div>
+          </div>
+
           <button onClick={obtenerLlegadas} style={styles.botonRefrescar}>
             Aplicar / Actualizar
           </button>
@@ -171,10 +222,18 @@ export default function Llegadas() {
                     <h3 style={styles.empleadoNombre}>
                       👤 {llegada.usuarios?.nombre} {llegada.usuarios?.apellido}
                     </h3>
-                    <span style={styles.fechaBadge}>
-                      📅 {String(llegada.fecha).split('T')[0]}
-                      {llegada.hora ? ` • 🕒 ${llegada.hora}` : ''}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={styles.fechaBadge}>
+                        📅 {String(llegada.fecha).split('T')[0]}
+                        {llegada.hora ? ` • 🕒 ${llegada.hora}` : ''}
+                      </span>
+                      {esTarde(llegada.hora, llegada.usuarios?.horario_llegada ?? null) && (
+                        <span style={styles.badgeLate}>Tarde</span>
+                      )}
+                      {calcularDuracionMin(llegada) != null && (
+                        <span style={styles.badgeDuration}>Duración: {calcularDuracionMin(llegada)} min</span>
+                      )}
+                    </div>
                   </div>
 
                   <div style={styles.llegadaInfo}>
@@ -208,6 +267,44 @@ export default function Llegadas() {
                         </div>
                       </>
                     )}
+
+                    {/* Sección de salida */}
+                    <div style={styles.salidaBox}>
+                      <h4 style={styles.subtitulo}>Salida</h4>
+                      {llegada.salida_hora ? (
+                        <>
+                          <p style={styles.texto}>
+                            🗓️ <strong>Fecha salida:</strong> {String(llegada.salida_fecha).split('T')[0]} • 🕒 {llegada.salida_hora}
+                          </p>
+                          {(llegada.salida_latitud != null && llegada.salida_longitud != null) && (
+                            <>
+                              <p style={styles.texto}>
+                                📌 <strong>Coordenadas salida:</strong> {Number(llegada.salida_latitud).toFixed(5)}, {Number(llegada.salida_longitud).toFixed(5)}
+                              </p>
+                              <div
+                                style={styles.mapBox}
+                                role="button"
+                                aria-label="Abrir en Google Maps"
+                                onClick={() => abrirMapa(Number(llegada.salida_latitud), Number(llegada.salida_longitud))}
+                                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && abrirMapa(Number(llegada.salida_latitud), Number(llegada.salida_longitud))}
+                                tabIndex={0}
+                              >
+                                <iframe
+                                  title={`mapa-salida-${llegada.id}`}
+                                  src={mapEmbedUrl(Number(llegada.salida_latitud), Number(llegada.salida_longitud), 15)}
+                                  style={styles.mapIframe as any}
+                                  loading="lazy"
+                                  referrerPolicy="no-referrer-when-downgrade"
+                                />
+                                <div style={styles.mapHint}>Click para abrir en Google Maps</div>
+                              </div>
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        <p style={{ ...styles.texto, color: '#ef4444', fontWeight: 700 }}>Pendiente de salida</p>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -323,8 +420,28 @@ const styles: { [key: string]: React.CSSProperties } = {
   },
   empleadoNombre: { fontSize: '1.1rem', fontWeight: 700, color: '#1e40af', margin: 0 },
   fechaBadge: { fontSize: '0.95rem', color: '#64748b', fontWeight: 600 },
+  badgeLate: {
+    display: 'inline-block',
+    backgroundColor: '#ef4444',
+    color: '#fff',
+    padding: '4px 8px',
+    borderRadius: 8,
+    fontSize: 12,
+    fontWeight: 700,
+  },
+  badgeDuration: {
+    display: 'inline-block',
+    backgroundColor: '#0ea5e9',
+    color: '#fff',
+    padding: '4px 8px',
+    borderRadius: 8,
+    fontSize: 12,
+    fontWeight: 700,
+  },
   llegadaInfo: { marginBottom: '1rem' },
   texto: { fontSize: '1rem', color: '#374151', marginBottom: '0.5rem', lineHeight: 1.5 },
+  subtitulo: { fontSize: '1.05rem', fontWeight: 700, color: '#1f2937', margin: '1rem 0 0.5rem' },
+  salidaBox: { marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px dashed #cbd5e1' },
 
   // mini‑mapa
   mapBox: {

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabaseAdmin } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
+import './responsive.css'
 
 export default function CrearTecnico() {
   const [nombre, setNombre] = useState('')

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import './responsive.css'
 
 type Estado = 'Pendiente' | 'Realizado'
 type UsuarioMin = { nombre: string | null; apellido: string | null }
@@ -321,11 +322,13 @@ const styles: { [k: string]: React.CSSProperties } = {
     backgroundColor: '#6b7280',
     color: '#fff',
     border: 'none',
-    padding: '10px 16px',
-    borderRadius: 8,
-    fontSize: 14,
+    padding: '8px 12px',
+    borderRadius: 6,
+    fontSize: 13,
     fontWeight: 600,
     cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    width: 'fit-content',
   },
   title: {
     margin: 0,

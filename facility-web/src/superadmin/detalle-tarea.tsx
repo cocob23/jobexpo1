@@ -306,15 +306,24 @@ export default function DetalleTareaSuperadmin() {
             </div>
 
             <div style={styles.botonesContainer}>
-              <button onClick={generarPDF} style={styles.boton}>
-                📄 Generar parte técnico
-              </button>
-
-              {tarea.parte_pdf && (
-                <button onClick={descargarPDF} style={styles.botonSecundario}>
-                  ⬇️ Descargar parte técnico
-                </button>
-              )}
+                {tarea.parte_pdf ? (
+                  <button onClick={descargarPDF} style={styles.botonSecundario}>
+                    ⬇️ Descargar parte técnico
+                  </button>
+                ) : (
+                  <div style={{
+                    padding: '16px 24px',
+                    borderRadius: '12px',
+                    fontSize: 16,
+                    fontWeight: 600,
+                    background: '#fef3c7',
+                    color: '#92400e',
+                    border: '2px dashed #fcd34d',
+                    textAlign: 'center'
+                  }}>
+                    Parte técnico pendiente (lo genera el técnico)
+                  </div>
+                )}
             </div>
           </div>
         )}

@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import './responsive.css'
+import { useToast } from '../components/ToastProvider'
 
 type UsuarioRef = {
   nombre: string | null
@@ -25,6 +27,7 @@ type TicketRaw = Omit<Ticket, 'usuarios'> & { usuarios: UsuarioRef | UsuarioRef[
 
 export default function Tickets() {
   const navigate = useNavigate()
+  const toast = useToast()
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [loading, setLoading] = useState(true)
   const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null)
@@ -114,7 +117,9 @@ export default function Tickets() {
     const { error } = await supabase.from('tickets').update({ estado: nuevoEstado }).eq('id', id)
     if (error) {
       console.error('Error al actualizar ticket:', error.message)
+      toast.error('No se pudo actualizar: ' + error.message)
     } else {
+      toast.success('Estado actualizado')
       obtenerTickets()
     }
   }
@@ -170,7 +175,10 @@ export default function Tickets() {
                 </div>
 
                 <div style={{ textAlign: 'right' }}>
-                  <p style={styles.row}><strong>Estado:</strong> {t.estado ?? 'Pendiente'}</p>
+                  <p style={styles.row}>
+                    <strong>Estado:</strong>{' '}
+                    <span style={estadoStyle(t.estado)}>{t.estado ?? 'Pendiente'}</span>
+                  </p>
                   <p style={styles.row}><strong>Importe:</strong> {t.importe != null ? `$${t.importe}` : '-'}</p>
                 </div>
               </div>
@@ -236,5 +244,19 @@ const styles: { [k: string]: React.CSSProperties } = {
   },
   modalImage: {
     maxWidth: '90%', maxHeight: '90%', borderRadius: 8, boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
+  }
+}
+
+// Helper para estilos de estado (aprobado, desaprobado, pendiente)
+const estadoStyle = (estado: string | null): React.CSSProperties => {
+  const base: React.CSSProperties = { fontWeight: 700 }
+  const val = (estado || 'Pendiente').toLowerCase()
+  switch (val) {
+    case 'aprobado':
+      return { ...base, color: '#16a34a' } // verde
+    case 'desaprobado':
+      return { ...base, color: '#dc2626' } // rojo
+    default:
+      return { ...base, color: '#d97706' } // amarillo para pendiente u otros
   }
 }

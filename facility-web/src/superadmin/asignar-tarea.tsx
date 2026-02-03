@@ -139,7 +139,7 @@ export default function AsignarTarea() {
   return (
     <div style={styles.wrapper}>
       <div style={styles.header}>
-        <button onClick={() => navigate('/fm')} style={styles.backButton}>
+        <button onClick={() => navigate('/superadmin')} style={styles.backButton}>
           ← Volver
         </button>
         <h2 style={{ margin: 0, flex: 1 }}>Asignar Tarea</h2>

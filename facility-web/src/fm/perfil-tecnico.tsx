@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
+import './responsive.css'
 
 dayjs.locale('es')
 

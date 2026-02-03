@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabaseAdmin } from '../lib/supabase'
 
-const rolesDisponibles = ['limpieza', 'mantenimiento', 'fm', 'superadmin', 'comercial']
+const rolesDisponibles = ['limpieza', 'mantenimiento', 'mantenimiento-externo', 'fm', 'superadmin', 'comercial']
 
 export default function CrearUsuario() {
   const navigate = useNavigate()
@@ -13,6 +13,34 @@ export default function CrearUsuario() {
   const [rol, setRol] = useState('limpieza')
   const [mensaje, setMensaje] = useState('')
   const [cargando, setCargando] = useState(false)
+  const [mostrarPass, setMostrarPass] = useState<boolean>(false)
+
+  // Panel de administración: listado y búsqueda/eliminación
+  const [usuarios, setUsuarios] = useState<Array<{ id: string; nombre: string | null; apellido: string | null; email: string | null; rol: string | null }>>([])
+  const [q, setQ] = useState('')
+  const usuariosFiltrados = useMemo(() => {
+    const query = q.trim().toLowerCase()
+    if (!query) return usuarios
+    return usuarios.filter((u) => {
+      const nom = (u.nombre ?? '').toLowerCase()
+      const ape = (u.apellido ?? '').toLowerCase()
+      const em = (u.email ?? '').toLowerCase()
+      const r = (u.rol ?? '').toLowerCase()
+      return nom.includes(query) || ape.includes(query) || em.includes(query) || r.includes(query)
+    })
+  }, [usuarios, q])
+
+  useEffect(() => {
+    cargarUsuarios()
+  }, [])
+
+  async function cargarUsuarios() {
+    const { data, error } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, nombre, apellido, email, rol')
+      .order('apellido', { ascending: true })
+    if (!error && data) setUsuarios(data as any)
+  }
 
   const crearUsuario = async () => {
     if (!email || !password || !nombre || !apellido || !rol) {
@@ -79,12 +107,13 @@ export default function CrearUsuario() {
 
   return (
     <div style={styles.wrapper}>
-      <div style={styles.contenedor}>
+      <div style={styles.adminGrid}>
+        <div style={styles.contenedor}>
         <div style={styles.headerContainer}>
           <button onClick={() => navigate('/superadmin')} style={styles.botonVolver}>
             ← Volver
           </button>
-          <h2 style={styles.titulo}>Crear Nuevo Usuario</h2>
+          <h2 style={styles.titulo}>Administrar Usuarios</h2>
         </div>
 
         <input
@@ -129,21 +158,31 @@ export default function CrearUsuario() {
             e.target.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)'
           }}
         />
-        <input
-          placeholder="Contraseña"
-          type="password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          style={styles.input}
-          onFocus={(e) => {
-            e.target.style.borderColor = '#1e40af'
-            e.target.style.boxShadow = '0 0 0 3px rgba(30, 64, 175, 0.1)'
-          }}
-          onBlur={(e) => {
-            e.target.style.borderColor = '#e2e8f0'
-            e.target.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)'
-          }}
-        />
+        <div style={styles.inputRow}>
+          <input
+            placeholder="Contraseña"
+            type={mostrarPass ? 'text' : 'password'}
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            style={styles.input}
+            onFocus={(e) => {
+              e.target.style.borderColor = '#1e40af'
+              e.target.style.boxShadow = '0 0 0 3px rgba(30, 64, 175, 0.1)'
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = '#e2e8f0'
+              e.target.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)'
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => setMostrarPass((v: boolean) => !v)}
+            title={mostrarPass ? 'Ocultar contraseña' : 'Ver contraseña'}
+            style={styles.eyeBtnSolid}
+          >
+            {mostrarPass ? 'Ocultar' : 'Ver'}
+          </button>
+        </div>
 
         <div style={styles.rolesContainer}>
           <label style={styles.label}>Seleccioná un rol:</label>
@@ -190,6 +229,40 @@ export default function CrearUsuario() {
             {mensaje}
           </p>
         )}
+        </div>
+
+        {/* Panel derecho: listado y eliminación */}
+        <div style={styles.panelListado}>
+          <h3 style={styles.panelTitulo}>Usuarios existentes</h3>
+          <input
+            placeholder="Buscar por nombre, apellido, email o rol"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            style={styles.input}
+          />
+          <div style={styles.listadoBox}>
+            {usuariosFiltrados.map((u) => (
+              <div key={u.id} style={styles.usuarioRow}>
+                <div>
+                  <div style={{ fontWeight: 700, color: '#0f172a' }}>{`${u.apellido ?? ''} ${u.nombre ?? ''}`.trim() || (u.email ?? '')}</div>
+                  <div style={{ color: '#64748b', fontSize: 12 }}>{u.email}</div>
+                  <div style={{ color: '#334155', fontSize: 12 }}>Rol: {u.rol}</div>
+                </div>
+                <button
+                  style={styles.btnDelete}
+                  onClick={async () => {
+                    const ok = window.confirm(`¿Eliminar usuario ${u.email}?`)
+                    if (!ok) return
+                    const { error } = await supabaseAdmin.from('usuarios').delete().eq('id', u.id)
+                    if (!error) setUsuarios((prev) => prev.filter((x) => x.id !== u.id))
+                  }}
+                >
+                  Eliminar
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -200,9 +273,15 @@ const styles: { [key: string]: React.CSSProperties } = {
     minHeight: '100vh',
     backgroundColor: '#f8fafc',
   },
+  adminGrid: {
+    display: 'grid',
+    gridTemplateColumns: '1fr 1fr',
+    gap: '16px',
+    padding: '16px',
+  },
   contenedor: {
     maxWidth: '500px',
-    margin: '0 auto',
+    margin: '0',
     padding: '2rem',
     display: 'flex',
     flexDirection: 'column',
@@ -225,6 +304,23 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s ease',
     backgroundColor: 'white',
     boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+  },
+  inputRow: {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'center',
+  },
+  eyeBtnSolid: {
+    padding: '10px 12px',
+    borderRadius: '10px',
+    border: '2px solid #e2e8f0',
+    backgroundColor: '#ffffff',
+    color: '#0f172a',
+    fontSize: '14px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
   },
   label: {
     fontSize: '16px',
@@ -306,4 +402,14 @@ const styles: { [key: string]: React.CSSProperties } = {
     transition: 'all 0.2s ease',
     boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
   },
+  panelListado: {
+    background: '#fff',
+    border: '1px solid #e2e8f0',
+    borderRadius: '12px',
+    padding: '16px',
+  },
+  panelTitulo: { margin: 0, marginBottom: '8px', fontSize: '18px', fontWeight: 700, color: '#0f172a' },
+  listadoBox: { border: '1px solid #e5e7eb', borderRadius: '10px', maxHeight: '540px', overflow: 'auto', background: '#fff' },
+  usuarioRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px', borderBottom: '1px solid #e5e7eb' },
+  btnDelete: { backgroundColor: '#7f1d1d', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: 8, cursor: 'pointer', fontWeight: 600 },
 }
