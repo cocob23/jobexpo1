@@ -41,6 +41,7 @@ export default function Layout() {
       {/* Rutas que existen pero NO aparecen en la tab bar */}
       <Tabs.Screen name="mis-llegadas" options={{ href: null }} />
       <Tabs.Screen name="marcar-llegada" options={{ href: null }} />
+      <Tabs.Screen name="marcar-salida" options={{ href: null }} />
     </Tabs>
   )
 }

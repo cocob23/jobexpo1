@@ -30,15 +30,6 @@ export default function SuperadminTabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="crear-usuario"
-        options={{
-          title: 'Usuarios',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="cotizaciones"
         options={{
           title: 'Cotizaciones',

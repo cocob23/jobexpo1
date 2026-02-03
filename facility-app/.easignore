@@ -1,0 +1,6 @@
+# .easignore
+facility-web/
+.expo/
+*.log
+dist/
+build/

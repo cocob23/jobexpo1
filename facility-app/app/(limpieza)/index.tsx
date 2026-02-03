@@ -20,6 +20,14 @@ export default function InicioLimpieza() {
 
         <TouchableOpacity
           style={styles.botonGrande}
+          onPress={() => router.push('/(limpieza)/marcar-salida' as any)}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.textoBoton}>⇥ Marcar salida</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.botonGrande}
           onPress={() => router.push('/(limpieza)/mis-llegadas')}
           activeOpacity={0.85}
         >

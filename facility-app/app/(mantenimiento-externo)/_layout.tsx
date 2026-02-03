@@ -13,6 +13,7 @@ export default function Layout() {
             tickets: 'document-text',
             inventario: 'clipboard',
             perfil: 'person-circle-outline',
+            planillas: 'folder-open',
           }
 
           const iconName = iconMap[route.name] || 'alert'
@@ -27,7 +28,11 @@ export default function Layout() {
       <Tabs.Screen name="tickets" options={{ title: 'Tickets' }} />
       <Tabs.Screen name="inventario" options={{ title: 'Inventario' }} />
       <Tabs.Screen name="perfil" options={{ title: 'Perfil' }} />
-      <Tabs.Screen name="planillas" options={{ title: 'Planillas' }} />
+  <Tabs.Screen name="planillas" options={{ title: 'Planillas' }} />
+  {/* recorridos & marcar-llegada hidden (acceso desde inicio) */}
+  <Tabs.Screen name="recorridos" options={{ href: null }} />
+  <Tabs.Screen name="marcar-llegada" options={{ href: null }} />
+  <Tabs.Screen name="marcar-salida" options={{ href: null }} />
 
 
       {/* oculta del tab bar, pero accesible vía router.push */}

@@ -133,6 +133,33 @@ export default function IndexMantenimiento() {
       >
         <Text style={styles.cardTexto}>Ver inventario personal</Text>
       </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.cardExtra}
+        onPress={() => router.push('/(mantenimiento-externo)/recorridos')}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={styles.cardTexto}>Recorridos</Text>
+        </View>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.cardExtra}
+        onPress={() => router.push('/(mantenimiento-externo)/marcar-llegada')}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={styles.cardTexto}>Marcar llegada</Text>
+        </View>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.cardExtra}
+        onPress={() => router.push('/(mantenimiento-externo)/marcar-salida' as any)}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={styles.cardTexto}>Marcar salida</Text>
+        </View>
+      </TouchableOpacity>
     </ScrollView>
   )
 }

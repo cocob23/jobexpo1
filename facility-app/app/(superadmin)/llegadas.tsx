@@ -1,11 +1,9 @@
-// app/(fm)/llegadas.tsx
 import { useEffect, useMemo, useState } from 'react'
 import {
   View, Text, FlatList, StyleSheet, RefreshControl, TextInput,
   TouchableOpacity, ActivityIndicator, Platform, Linking, ScrollView
 } from 'react-native'
 import DateTimePicker from '@react-native-community/datetimepicker'
-import MapView, { Marker } from 'react-native-maps'
 import dayjs from 'dayjs'
 import 'dayjs/locale/es'
 import { Ionicons } from '@expo/vector-icons'
@@ -148,27 +146,13 @@ export default function LlegadasFM() {
               <Text style={styles.metaSmall}>
                 {Number(item.latitud).toFixed(5)}, {Number(item.longitud).toFixed(5)}
               </Text>
-              <View style={styles.mapBox}>
-                <MapView
-                  style={styles.map}
-                  pointerEvents="none"
-                  initialRegion={{
-                    latitude: Number(item.latitud),
-                    longitude: Number(item.longitud),
-                    latitudeDelta: 0.005,
-                    longitudeDelta: 0.005,
-                  }}
-                >
-                  <Marker coordinate={{ latitude: Number(item.latitud), longitude: Number(item.longitud) }} />
-                </MapView>
-                <TouchableOpacity
-                  onPress={() => openInMaps(Number(item.latitud!), Number(item.longitud!), item.lugar)}
-                  style={styles.mapBtn}
-                  activeOpacity={0.9}
-                >
-                  <Text style={styles.mapBtnText}>Ver mapa</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                onPress={() => openInMaps(Number(item.latitud!), Number(item.longitud!), item.lugar)}
+                style={styles.mapBtn}
+                activeOpacity={0.9}
+              >
+                <Text style={styles.mapBtnText}>Ver mapa</Text>
+              </TouchableOpacity>
             </>
           )}
         </View>
@@ -344,13 +328,13 @@ const styles = StyleSheet.create({
   meta: { color: '#374151', marginTop: 2 },
   metaSmall: { color: '#6b7280', marginTop: 2, fontSize: 12 },
 
-  mapBox: {
-    marginTop: 8, height: 120, borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#e2e8f0',
-  },
-  map: { flex: 1 },
   mapBtn: {
-    position: 'absolute', right: 8, bottom: 8, backgroundColor: '#2563EB',
-    paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8,
+    backgroundColor: '#2563EB',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginTop: 8,
   },
   mapBtnText: { color: '#fff', fontWeight: '700' },
 })

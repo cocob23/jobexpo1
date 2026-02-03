@@ -3,6 +3,8 @@ import { supabase } from '@/constants/supabase'
 import { Ionicons } from '@expo/vector-icons'
 import { Buffer } from 'buffer'
 import * as FileSystem from 'expo-file-system'
+// Usa la API legacy para readAsStringAsync según recomendación del SDK 54
+import * as FileSystemLegacy from 'expo-file-system/legacy'
 import * as Print from 'expo-print'
 import { useLocalSearchParams, useRouter } from 'expo-router'
 import { shareAsync } from 'expo-sharing'
@@ -27,6 +29,19 @@ import uuid from 'react-native-uuid'
 
 global.Buffer = Buffer
 
+function base64ToBytes(b64: string): Uint8Array {
+  try {
+    if (typeof Buffer !== 'undefined') {
+      return Buffer.from(b64, 'base64') as unknown as Uint8Array
+    }
+  } catch {}
+  const binaryStr = typeof atob === 'function' ? atob(b64) : (globalThis as any).atob?.(b64)
+  if (!binaryStr) throw new Error('No hay soporte para atob/base64 en este entorno')
+  const bytes = new Uint8Array(binaryStr.length)
+  for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i)
+  return bytes
+}
+
 export default function DetalleTareaScreen() {
   const router = useRouter()
   const { id } = useLocalSearchParams()
@@ -38,6 +53,8 @@ export default function DetalleTareaScreen() {
   const [firmaResponsable, setFirmaResponsable] = useState<string | null>(null)
   const [firmaTecnico, setFirmaTecnico] = useState<string | null>(null)
   const [refrescando, setRefrescando] = useState(false)
+  // Mantener referencia al último PDF local generado para compartir offline
+  const [lastLocalPdfUri, setLastLocalPdfUri] = useState<string | null>(null)
 
   useEffect(() => {
     obtenerTarea()
@@ -53,11 +70,12 @@ export default function DetalleTareaScreen() {
 
     if (error) {
       Alert.alert('Error', 'No se pudo obtener la tarea')
-    } else {
-      setTarea(data)
-      setPdfUrl(data.parte_pdf || null)
-      setChecklist(data.checklist || [])
+      return
     }
+
+    setTarea(data)
+    setPdfUrl(data?.parte_pdf || null)
+    setChecklist(data?.checklist || [])
   }
 
   const onRefresh = useCallback(() => {
@@ -172,28 +190,29 @@ export default function DetalleTareaScreen() {
       const bucket = 'partestecnicos'
       const path = `pdfs/${nombreArchivo}`
 
-      const pdfBase64 = await FileSystem.readAsStringAsync(uri, {
-        encoding: FileSystem.EncodingType.Base64,
+      if (!uri) throw new Error('No se generó URI del PDF')
+      const pdfBase64 = await FileSystemLegacy.readAsStringAsync(uri, {
+        // SDK 54+: use string literal 'base64' to avoid type mismatch
+        encoding: 'base64' as any,
       })
+      if (!pdfBase64) throw new Error('PDF vacío (base64 no disponible)')
 
       const sessionRes = await supabase.auth.getSession()
       const token = sessionRes.data.session?.access_token
       if (!token) throw new Error('No se pudo obtener el token de sesión')
 
-      const response = await fetch(
-        `https://lknfaxkigownvjsijzhb.supabase.co/storage/v1/object/${bucket}/${path}`,
-        {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/pdf',
-            Authorization: `Bearer ${token}`,
-            'x-upsert': 'true',
-          },
-          body: Buffer.from(pdfBase64, 'base64'),
-        }
-      )
+      const uploadUrl = `https://lknfaxkigownvjsijzhb.supabase.co/storage/v1/object/${bucket}/${path}`
+      const uploadRes = await FileSystemLegacy.uploadAsync(uploadUrl, uri, {
+        headers: {
+          'Content-Type': 'application/pdf',
+          Authorization: `Bearer ${token}`,
+          'x-upsert': 'true',
+        },
+        httpMethod: 'PUT',
+        uploadType: FileSystemLegacy.FileSystemUploadType.BINARY_CONTENT,
+      })
 
-      if (!response.ok) throw new Error('Error al subir el PDF al storage')
+      if (uploadRes.status !== 200) throw new Error(`Error al subir el PDF al storage: ${uploadRes.status}`)
 
       const url = supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl
 
@@ -205,6 +224,12 @@ export default function DetalleTareaScreen() {
       if (updateError) throw updateError
 
       Alert.alert('PDF generado y subido')
+      // Guardamos el PDF local para permitir compartir/descargar offline
+      setLastLocalPdfUri(uri)
+      // Abrir hoja de compartir inmediatamente con el PDF recién generado
+      try {
+        await shareAsync(uri, { dialogTitle: 'Compartir parte técnico', UTI: 'com.adobe.pdf', mimeType: 'application/pdf' })
+      } catch {}
       setPdfUrl(url)
     } catch (err: any) {
       Alert.alert('Error', err.message || 'No se pudo generar PDF')
@@ -213,16 +238,39 @@ export default function DetalleTareaScreen() {
   }
 
   const descargarPDF = async () => {
-    if (!pdfUrl) return
     try {
-      const localPath = FileSystem.documentDirectory + 'parte_tecnico.pdf'
-      const downloadResumable = FileSystem.createDownloadResumable(pdfUrl, localPath)
-      const downloadResult = await downloadResumable.downloadAsync()
-      const uri = downloadResult?.uri
-      if (uri) await shareAsync(uri)
-      else Alert.alert('Error', 'No se pudo descargar el PDF')
-    } catch (error) {
-      Alert.alert('Error', 'Hubo un problema al descargar el PDF')
+      // Si tenemos el último PDF local generado, compartirlo directamente (offline-first)
+      if (lastLocalPdfUri) {
+        await shareAsync(lastLocalPdfUri, { dialogTitle: 'Compartir parte técnico', UTI: 'com.adobe.pdf', mimeType: 'application/pdf' })
+        return
+      }
+
+      // Caso remoto: validar que haya URL
+      if (!pdfUrl || typeof pdfUrl !== 'string') {
+        Alert.alert('PDF', 'No hay PDF disponible. Generá el parte técnico primero.')
+        return
+      }
+
+      // Elegimos un directorio escribible: documentDirectory (sandbox) o cacheDirectory.
+      const docDir = (FileSystem as any).documentDirectory
+      const cacheDir = (FileSystem as any).cacheDirectory
+      const baseDir = (docDir || cacheDir)
+      if (!baseDir) {
+        Alert.alert('Error', 'No se encontró un directorio escribible para guardar el PDF')
+        return
+      }
+      const safeBaseDir = String(baseDir).endsWith('/') ? String(baseDir) : String(baseDir) + '/'
+      const ts = Date.now()
+      const localPath = `${safeBaseDir}parte_tecnico_${id || 'tarea'}_${ts}.pdf`
+      const res = await FileSystemLegacy.downloadAsync(pdfUrl, localPath)
+      const uri = res?.uri || localPath
+      if (uri) {
+        await shareAsync(uri, { dialogTitle: 'Compartir parte técnico', UTI: 'com.adobe.pdf', mimeType: 'application/pdf' })
+        return
+      }
+      Alert.alert('Error', 'No se pudo descargar el PDF')
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Hubo un problema al descargar el PDF')
     }
   }
 

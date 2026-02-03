@@ -6,7 +6,6 @@ export default function SuperadminIndex() {
   const router = useRouter()
 
   const acciones: { label: string; icon: keyof typeof Ionicons.glyphMap; path: string }[] = [
-    { label: 'Usuarios',      icon: 'person-add-outline',    path: '/(superadmin)/crear-usuario' },
     { label: 'Tickets',       icon: 'document-text-outline', path: '/(superadmin)/tickets' },
     { label: 'Cotizaciones',  icon: 'calculator-outline',    path: '/(superadmin)/cotizaciones' },
     { label: 'Inventario',    icon: 'cube-outline',          path: '/(superadmin)/inventario' },

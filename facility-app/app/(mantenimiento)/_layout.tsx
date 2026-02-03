@@ -12,6 +12,7 @@ export default function Layout() {
             tareas: 'checkmark-circle',
             tickets: 'document-text',
             inventario: 'clipboard',
+            // recorridos removed from tab bar; accessible via index button
             perfil: 'person-circle-outline',
           }
 
@@ -26,7 +27,15 @@ export default function Layout() {
       <Tabs.Screen name="tareas" options={{ title: 'Tareas' }} />
       <Tabs.Screen name="tickets" options={{ title: 'Tickets' }} />
       <Tabs.Screen name="inventario" options={{ title: 'Inventario' }} />
-      <Tabs.Screen name="planillas" options={{ title: 'Planillas' }} />
+  <Tabs.Screen name="planillas" options={{ title: 'Planillas' }} />
+    {/* recorridos hidden from tab bar */}
+    <Tabs.Screen name="recorridos" options={{ href: null }} />
+    {/* marcar-llegada hidden from tab bar */}
+    <Tabs.Screen name="marcar-llegada" options={{ href: null }} />
+    {/* marcar-salida hidden from tab bar */}
+    <Tabs.Screen name="marcar-salida" options={{ href: null }} />
+  {/* mis-llegadas hidden from tab bar */}
+  <Tabs.Screen name="mis-llegadas" options={{ href: null }} />
       <Tabs.Screen name="perfil" options={{ title: 'Perfil' }} />
 
       {/* oculta del tab bar, pero accesible vía router.push */}

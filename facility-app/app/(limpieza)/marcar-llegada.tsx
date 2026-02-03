@@ -20,8 +20,8 @@ export default function MarcarLlegadaScreen() {
   const [longitud, setLongitud] = useState<number | null>(null)
 
   // Empresas (autocompletar)
-  const [empresas, setEmpresas] = useState<{ id: string; nombre: string }[]>([])
-  const [filtradas, setFiltradas] = useState<{ id: string; nombre: string }[]>([])
+  const [empresas, setEmpresas] = useState<{ id: string; nombre: string; alias?: string | null }[]>([])
+  const [filtradas, setFiltradas] = useState<{ id: string; nombre: string; alias?: string | null }[]>([])
   const [empresaSeleccionadaId, setEmpresaSeleccionadaId] = useState<string>('')
 
   useEffect(() => {
@@ -55,7 +55,7 @@ export default function MarcarLlegadaScreen() {
     ;(async () => {
       const { data, error } = await supabase
         .from('empresas')
-        .select('id, nombre')
+        .select('id, nombre, alias')
         .order('nombre', { ascending: true })
       if (error) {
         // Si no tiene permisos, lo avisamos (RLS)
@@ -69,18 +69,52 @@ export default function MarcarLlegadaScreen() {
     })()
   }, [])
 
-  // Filtra a medida que se tipea
+  // Búsqueda en servidor (case-insensitive) con debounce
   useEffect(() => {
-    if (!lugar.trim()) {
-      setFiltradas([])
-      return
-    }
-    const q = lugar.toLowerCase()
-    const res = empresas
-      .filter(e => e.nombre.toLowerCase().includes(q))
-      .slice(0, 12)
-    setFiltradas(res)
-  }, [lugar, empresas])
+    const q = lugar.trim()
+    const handler = setTimeout(async () => {
+      if (!q) {
+        setFiltradas([])
+        return
+      }
+      try {
+        // Consulta ilike por nombre o alias (case-insensitive)
+        const { data, error } = await supabase
+          .from('empresas')
+          .select('id, nombre, alias')
+          .or(`nombre.ilike.%${q}%,alias.ilike.%${q}%`)
+          .order('nombre', { ascending: true })
+          .limit(12)
+
+        if (error) {
+          // Fallback local si hay empresas cargadas y falla el SELECT (RLS)
+          const ql = q.toLowerCase()
+          const local = empresas
+            .filter(e => {
+              const nombreOk = e.nombre?.toLowerCase().includes(ql)
+              const aliasOk = e.alias ? e.alias.toLowerCase().includes(ql) : false
+              return nombreOk || aliasOk
+            })
+            .slice(0, 12)
+          setFiltradas(local)
+        } else {
+          setFiltradas(data || [])
+        }
+      } catch (e) {
+        // Fallback por excepción
+        const ql = q.toLowerCase()
+        const local = empresas
+          .filter(e => {
+            const nombreOk = e.nombre?.toLowerCase().includes(ql)
+            const aliasOk = e.alias ? e.alias.toLowerCase().includes(ql) : false
+            return nombreOk || aliasOk
+          })
+          .slice(0, 12)
+        setFiltradas(local)
+      }
+    }, 200)
+    return () => clearTimeout(handler)
+  }, [lugar])
 
   const marcarLlegada = async () => {
     if (!empresaSeleccionadaId) {
@@ -136,24 +170,32 @@ export default function MarcarLlegadaScreen() {
           }}
           style={styles.input}
         />
-        {filtradas.length > 0 && (
+        {lugar.trim().length > 0 && (
           <View style={styles.suggestBox}>
-            <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 240 }}>
-              {filtradas.map(e => (
-                <TouchableOpacity
-                  key={e.id}
-                  style={styles.suggestItem}
-                  onPress={() => {
-                    setLugar(e.nombre)
-                    setEmpresaSeleccionadaId(e.id)
-                    setFiltradas([])
-                  }}
-                  activeOpacity={0.85}
-                >
-                  <Text style={{ color: '#0f172a' }}>{e.nombre}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+            {filtradas.length > 0 ? (
+              <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 240 }}>
+                {filtradas.map(e => (
+                  <TouchableOpacity
+                    key={e.id}
+                    style={styles.suggestItem}
+                    onPress={() => {
+                      setLugar(e.nombre)
+                      setEmpresaSeleccionadaId(e.id)
+                      setFiltradas([])
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={{ color: '#0f172a' }}>
+                      {e.nombre}{e.alias ? `  ·  (${e.alias})` : ''}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={[styles.suggestItem, { borderBottomWidth: 0 }]}> 
+                <Text style={{ color: '#64748b' }}>No hay coincidencias</Text>
+              </View>
+            )}
           </View>
         )}
       </View>

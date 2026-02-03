@@ -2,6 +2,7 @@
 import { supabase } from '@/constants/supabase'
 import dayjs from 'dayjs'
 import { Image } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 
 import 'dayjs/locale/es'
 import { router } from 'expo-router'
@@ -133,6 +134,47 @@ export default function IndexMantenimiento() {
       >
         <Text style={styles.cardTexto}>Ver inventario personal</Text>
       </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.cardExtra}
+        onPress={() => router.push('/(mantenimiento)/recorridos')}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Ionicons name="walk" size={20} color="#0369a1" />
+          <Text style={styles.cardTexto}>Recorridos</Text>
+        </View>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.cardExtra}
+        onPress={() => router.push('/(mantenimiento)/marcar-llegada')}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Ionicons name="pin" size={20} color="#16a34a" />
+          <Text style={styles.cardTexto}>Marcar llegada</Text>
+        </View>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={styles.cardExtra}
+        onPress={() => router.push('/(mantenimiento)/marcar-salida' as any)}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Ionicons name="exit-outline" size={20} color="#7c3aed" />
+          <Text style={styles.cardTexto}>Marcar salida</Text>
+        </View>
+      </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.cardExtra}
+            onPress={() => router.push('/(mantenimiento)/mis-llegadas')}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="time-outline" size={20} color="#0369a1" />
+              <Text style={styles.cardTexto}>Mis llegadas</Text>
+            </View>
+          </TouchableOpacity>
+
     </ScrollView>
   )
 }
@@ -163,13 +205,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   logo: {
-  width: 270,
-  height: 90,
-  resizeMode: 'contain',
-  alignSelf: 'center',
-  marginTop: 34,
-  marginBottom: 20,
-},
+    width: 120,
+    height: 120,
+    alignSelf: 'center',
+    marginBottom: 12,
+    resizeMode: 'contain',
+  },
 
   card: {
     backgroundColor: '#f3f4f6',
